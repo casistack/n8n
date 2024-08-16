@@ -44,6 +44,8 @@ services:
       - POSTGRES_DB=${DB_POSTGRESDB_DATABASE:-n8n}
       - POSTGRES_USER=${DB_POSTGRESDB_USER:-n8n}
       - POSTGRES_PASSWORD=${DB_POSTGRESDB_PASSWORD}
+    ports:
+      - ":5432"			
     volumes:
       - postgres_data_n8n_annex:/var/lib/postgresql/data
 volumes:
