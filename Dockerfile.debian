@@ -1,0 +1,56 @@
+FROM node:20-bullseye-slim
+
+# Accept N8N_VERSION as a build argument
+ARG N8N_VERSION=latest
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    ca-certificates \
+    procps \
+    libgtk2.0-0 \
+    libgtk-3-0 \
+    libgbm-dev \
+    libnotify-dev \
+    libgconf-2-4 \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libxtst6 \
+    xauth \
+    xvfb \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Chrome
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up n8n
+RUN npm install -g n8n@${N8N_VERSION}
+
+# Set up environment for Puppeteer and Chrome
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+ENV CHROME_BIN=/usr/bin/google-chrome-stable
+ENV CHROME_PATH=/usr/lib/google-chrome/
+
+EXPOSE 5678
+
+# Set up directories
+RUN mkdir /home/node/.n8n && chown -R node:node /home/node/.n8n
+
+USER node
+WORKDIR /home/node
+
+# Copy and set permissions for entrypoint script
+COPY docker/images/n8n/docker-entrypoint.sh /
+USER root
+RUN chmod +x /docker-entrypoint.sh
+USER node
+
+ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+CMD ["n8n"]
