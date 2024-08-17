@@ -1,10 +1,9 @@
 FROM node:20-bullseye-slim
 
-ARG N8N_VERSION
+ARG N8N_VERSION=latest
 
 # Check if N8N_VERSION is provided and print it
 RUN echo "N8N_VERSION is set to: ${N8N_VERSION}"
-RUN if [ -z "$N8N_VERSION" ] ; then echo "The N8N_VERSION argument is missing!" ; exit 1; fi
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
@@ -33,11 +32,15 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
     && apt-get update && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
+# Install n8n and full-icu globally as root
+RUN npm install -g n8n@${N8N_VERSION} full-icu && npm cache clean --force
+
 # Set up environment for Puppeteer and Chrome
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 ENV CHROME_BIN=/usr/bin/google-chrome-stable
 ENV CHROME_PATH=/usr/lib/google-chrome/
+ENV NODE_ICU_DATA=/usr/local/lib/node_modules/full-icu
 
 # Set default environment variables
 ENV NODE_ENV=production
@@ -47,26 +50,16 @@ ENV TZ=Europe/London
 
 EXPOSE 5678
 
-# Set up directories
+# Set up directories and permissions
 RUN mkdir -p /home/node/.n8n && chown -R node:node /home/node/.n8n
 
-WORKDIR /home/node
+# Copy and set permissions for entrypoint script
+COPY docker-entrypoint.sh /
+RUN chmod +x /docker-entrypoint.sh
 
 # Switch to non-root user
 USER node
+WORKDIR /home/node
 
-# Install n8n and full-icu for the node user (split into separate steps)
-RUN echo "Installing n8n version ${N8N_VERSION}"
-RUN npm install -g n8n@${N8N_VERSION}
-RUN npm install -g full-icu
-RUN npm cache clean --force
-
-ENV PATH="/home/node/.npm-global/bin:${PATH}"
-ENV NODE_ICU_DATA=/home/node/.npm-global/lib/node_modules/full-icu
-
-# Copy and set permissions for entrypoint script
-COPY --chown=node:node docker-entrypoint.sh /home/node/
-RUN chmod +x /home/node/docker-entrypoint.sh
-
-ENTRYPOINT ["tini", "--", "/home/node/docker-entrypoint.sh"]
+ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 CMD ["n8n", "start"]
