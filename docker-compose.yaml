@@ -1,7 +1,11 @@
 version: '3.8'
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.custom
+      args:
+        - N8N_VERSION=${N8N_VERSION:-latest}
     restart: always
     environment:
       - DB_TYPE=postgresdb
@@ -16,8 +20,8 @@ services:
       - NODE_ENV=${NODE_ENV:-production}
       - NODE_FUNCTION_ALLOW_EXTERNAL=${NODE_FUNCTION_ALLOW_EXTERNAL:-crypto}
       - WEBHOOK_URL=${WEBHOOK_URL}
-      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
-      - TZ=${TZ:-UTC}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/London}
+      - TZ=${TZ:-Europe/London}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - EXECUTIONS_DATA_PRUNE=${EXECUTIONS_DATA_PRUNE:-true}
       - EXECUTIONS_DATA_MAX_AGE=${EXECUTIONS_DATA_MAX_AGE:-336}
@@ -31,12 +35,15 @@ services:
       - N8N_REINSTALL_MISSING_PACKAGES=${N8N_REINSTALL_MISSING_PACKAGES:-true}
       - CODE_ENABLE_STDOUT=${CODE_ENABLE_STDOUT:-true}
       - NODE_FUNCTION_ALLOW_BUILTIN=${NODE_FUNCTION_ALLOW_BUILTIN:-*}
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=${PUPPETEER_SKIP_CHROMIUM_DOWNLOAD:-true}
+      - PUPPETEER_EXECUTABLE_PATH=${PUPPETEER_EXECUTABLE_PATH:-/usr/bin/chromium-browser}
     ports:
       - ":5678"
     volumes:
       - n8n_data_annex:/home/node/.n8n
     depends_on:
       - postgres
+
   postgres:
     image: postgres:16-alpine
     restart: always
@@ -45,9 +52,10 @@ services:
       - POSTGRES_USER=${DB_POSTGRESDB_USER:-n8n}
       - POSTGRES_PASSWORD=${DB_POSTGRESDB_PASSWORD}
     ports:
-      - ":5432"			
+      - ":5432"
     volumes:
       - postgres_data_n8n_annex:/var/lib/postgresql/data
+
 volumes:
   n8n_data_annex:
   postgres_data_n8n_annex:
