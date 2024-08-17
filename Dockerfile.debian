@@ -91,5 +91,5 @@ RUN export NVM_DIR="$HOME/.nvm" \
     && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" \
     && n8n --version
 
-ENTRYPOINT ["tini", "--", "/home/node/docker-entrypoint.sh"]
+ENTRYPOINT ["/home/node/docker-entrypoint.sh"]
 CMD ["n8n", "start"]
