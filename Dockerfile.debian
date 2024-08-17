@@ -53,23 +53,25 @@ RUN mkdir -p /home/node/.n8n && chown -R node:node /home/node/.n8n
 USER node
 WORKDIR /home/node
 
-# Install NVM, Node.js, and npm
+# Install NVM, Node.js, npm, and verify installation
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash \
-    && . $NVM_DIR/nvm.sh \
+    && export NVM_DIR="$HOME/.nvm" \
+    && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" \
+    && [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" \
     && nvm install $NODE_VERSION \
     && nvm alias default $NODE_VERSION \
-    && nvm use default
+    && nvm use default \
+    && node --version \
+    && npm --version
 
 # Add node and npm to path so the commands are available
 ENV PATH /home/node/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH
 
-# Verify Node.js and npm installation
-RUN node --version && npm --version
-
 # Install n8n and full-icu
-RUN . $NVM_DIR/nvm.sh && \
-    npm install n8n@${N8N_VERSION} full-icu && \
-    npm cache clean --force
+RUN export NVM_DIR="$HOME/.nvm" \
+    && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" \
+    && npm install n8n@${N8N_VERSION} full-icu \
+    && npm cache clean --force
 
 # Set up environment for n8n
 ENV NODE_ICU_DATA /home/node/.nvm/versions/node/v${NODE_VERSION}/lib/node_modules/full-icu
@@ -85,7 +87,9 @@ RUN chmod +x /home/node/docker-entrypoint.sh
 EXPOSE 5678
 
 # Verify n8n installation
-RUN . $NVM_DIR/nvm.sh && n8n --version
+RUN export NVM_DIR="$HOME/.nvm" \
+    && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" \
+    && n8n --version
 
 ENTRYPOINT ["tini", "--", "/home/node/docker-entrypoint.sh"]
 CMD ["n8n", "start"]
