@@ -4,10 +4,34 @@ FROM docker.n8n.io/n8nio/n8n:${N8N_VERSION}
 USER root
 
 # Install additional dependencies
-RUN apk add --no-cache libstdc++ chromium nss freetype freetype-dev harfbuzz ca-certificates ttf-freefont glib
+RUN apk add --no-cache \
+    libstdc++ \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    glib \
+    dbus \
+    mesa-gl \
+    mesa-egl \
+    libxcomposite \
+    libxdamage \
+    libxrandr \
+    alsa-lib \
+    at-spi2-atk \
+    atk \
+    eudev-libs \
+    libxkbcommon \
+    libxshmfence
 
 # Set environment variables
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV CHROME_BIN=/usr/bin/chromium-browser
+ENV CHROME_PATH=/usr/lib/chromium/
+ENV PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
 
 USER node
