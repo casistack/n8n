@@ -43,6 +43,12 @@ services:
       #- PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
       #- CHROME_BIN=${CHROME_BIN:-/usr/bin/chromium-browser}
       #- CHROME_PATH=${CHROME_PATH:-/usr/lib/chromium/}
+			 - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+		   - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+		   - CHROME_BIN=/usr/bin/chromium
+		   - CHROME_PATH=/usr/lib/chromium/
+		   - PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
+		   
     ports:
       - ":5678"  # Bind host port 5678 to container port 5678
     volumes:
