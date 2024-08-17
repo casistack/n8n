@@ -25,8 +25,4 @@ if ! command -v n8n &> /dev/null; then
     exit 1
 fi
 
-# Try to run n8n directly
-echo "Attempting to run n8n directly:"
-/home/node/.npm-global/bin/n8n --version
-
 exec "$@"
