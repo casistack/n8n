@@ -60,7 +60,7 @@ USER node
 WORKDIR /home/node
 
 # Copy and set permissions for entrypoint script
-COPY docker-entrypoint.sh /
+COPY docker/images/n8n/docker-entrypoint.sh /
 USER root
 RUN chmod +x /docker-entrypoint.sh
 USER node
