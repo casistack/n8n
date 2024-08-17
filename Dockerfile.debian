@@ -67,7 +67,7 @@ ENV NODE_PATH $NVM_DIR/v$NODE_VERSION/lib/node_modules
 ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
 
 # Install n8n and full-icu
-RUN npm install -g n8n@${N8N_VERSION} full-icu && npm cache clean --force
+RUN npm install n8n@${N8N_VERSION} full-icu && npm cache clean --force
 
 # Set up environment for n8n
 ENV NODE_ICU_DATA /home/node/.nvm/versions/node/v$NODE_VERSION/lib/node_modules/full-icu
