@@ -32,11 +32,6 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
     && apt-get update && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
-# Install n8n and full-icu globally as root
-RUN npm install -g n8n@${N8N_VERSION} full-icu && npm cache clean --force
-
-# Verify n8n installation
-RUN n8n --version
 
 # Set up environment for Puppeteer and Chrome
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -55,8 +50,7 @@ EXPOSE 5678
 
 # Set up directories and permissions
 RUN mkdir -p /home/node/.n8n && chown -R node:node /home/node/.n8n
-RUN chown -R node:node /usr/local/lib/node_modules
-RUN chmod -R 755 /usr/local/lib/node_modules/n8n
+
 
 # Copy and set permissions for entrypoint script
 COPY docker-entrypoint.sh /
@@ -65,6 +59,12 @@ RUN chmod +x /docker-entrypoint.sh
 # Switch to non-root user
 USER node
 WORKDIR /home/node
+
+# Install n8n and full-icu globally as root
+RUN npm install n8n@${N8N_VERSION} full-icu && npm cache clean --force
+
+# Verify n8n installation
+RUN n8n --version
 
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
 CMD ["n8n", "start"]
