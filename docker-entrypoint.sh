@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
 # Debug information
@@ -8,14 +8,17 @@ echo "n8n location: $(which n8n)"
 echo "n8n executable permissions: $(ls -l $(which n8n))"
 echo "n8n symlink target: $(readlink -f $(which n8n))"
 echo "n8n directory contents: $(ls -l $(dirname $(which n8n)))"
-echo "n8n version: $(/usr/local/bin/n8n --version)"
+
+# Load NVM environment
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+# Verify Node.js and npm are available
 echo "Node version: $(node --version)"
 echo "NPM version: $(npm --version)"
 echo "NPM global packages:"
 npm list -g --depth=0
-
-echo "Executing n8n directly:"
-/usr/local/bin/n8n --version
 
 if [ -d /opt/custom-certificates ]; then
   echo "Trusting custom certificates from /opt/custom-certificates."
