@@ -33,6 +33,14 @@ if ! command -v n8n &> /dev/null; then
     exit 1
 fi
 
+# Check if Chromium is available
+if [ -f "$PUPPETEER_EXECUTABLE_PATH" ]; then
+  echo "Chromium found at $PUPPETEER_EXECUTABLE_PATH"
+else
+  echo "Error: Chromium not found at $PUPPETEER_EXECUTABLE_PATH"
+  exit 1
+fi
+
 echo "Attempting to run n8n:"
 n8n --version
 
