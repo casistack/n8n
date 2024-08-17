@@ -11,10 +11,10 @@ ENV NODE_ENV=production \
     GENERIC_TIMEZONE=Europe/London \
     TZ=Europe/London \
     DEBIAN_FRONTEND=noninteractive \
-    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
-    CHROME_BIN=/usr/bin/google-chrome-stable \
-    CHROME_PATH=/usr/lib/google-chrome/ \
+    #PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    #PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
+    #CHROME_BIN=/usr/bin/google-chrome-stable \
+    #CHROME_PATH=/usr/lib/google-chrome/ \
     NVM_DIR=/home/node/.nvm
 
 # Install base dependencies
