@@ -1,4 +1,5 @@
 version: '3.8'
+
 services:
   n8n:
     build:
@@ -6,8 +7,8 @@ services:
       dockerfile: Dockerfile.debian
       args:
         - N8N_VERSION=${N8N_VERSION:-latest}
-				- NVM_VERSION=${NVM_VERSION:-0.39.3}
-		    - NODE_VERSION=${NODE_VERSION:-20}
+        - NVM_VERSION=${NVM_VERSION:-0.39.3}
+        - NODE_VERSION=${NODE_VERSION:-20}
     restart: always
     environment:
       - DB_TYPE=postgresdb
@@ -43,7 +44,7 @@ services:
       - CHROME_BIN=${CHROME_BIN:-/usr/bin/chromium-browser}
       - CHROME_PATH=${CHROME_PATH:-/usr/lib/chromium/}
     ports:
-      - ":5678"
+      - ":5678"  # Bind host port 5678 to container port 5678
     volumes:
       - n8n_data_annex:/home/node/.n8n
     depends_on:
@@ -57,7 +58,7 @@ services:
       - POSTGRES_USER=${DB_POSTGRESDB_USER:-n8n}
       - POSTGRES_PASSWORD=${DB_POSTGRESDB_PASSWORD}
     ports:
-      - ":5432"
+      - ":5432"  # Bind host port 5432 to container port 5432
     volumes:
       - postgres_data_n8n_annex:/var/lib/postgresql/data
 
