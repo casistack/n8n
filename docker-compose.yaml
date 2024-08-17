@@ -3,7 +3,7 @@ services:
   n8n:
     build:
       context: .
-      dockerfile: Dockerfile.custom
+      dockerfile: Dockerfile.debian
       args:
         - N8N_VERSION=${N8N_VERSION:-latest}
     restart: always
