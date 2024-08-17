@@ -2,7 +2,8 @@ FROM node:20-bullseye-slim
 
 ARG N8N_VERSION
 
-# Check if N8N_VERSION is provided
+# Check if N8N_VERSION is provided and print it
+RUN echo "N8N_VERSION is set to: ${N8N_VERSION}"
 RUN if [ -z "$N8N_VERSION" ] ; then echo "The N8N_VERSION argument is missing!" ; exit 1; fi
 
 # Install dependencies
@@ -54,8 +55,11 @@ WORKDIR /home/node
 # Switch to non-root user
 USER node
 
-# Install n8n and full-icu for the node user
-RUN npm install -g n8n@${N8N_VERSION} full-icu && npm cache clean --force
+# Install n8n and full-icu for the node user (split into separate steps)
+RUN echo "Installing n8n version ${N8N_VERSION}"
+RUN npm install -g n8n@${N8N_VERSION}
+RUN npm install -g full-icu
+RUN npm cache clean --force
 
 ENV PATH="/home/node/.npm-global/bin:${PATH}"
 ENV NODE_ICU_DATA=/home/node/.npm-global/lib/node_modules/full-icu
