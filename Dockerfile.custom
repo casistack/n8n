@@ -21,8 +21,6 @@ RUN apk add --no-cache \
     libxdamage \
     libxrandr \
     alsa-lib \
-    at-spi2-atk \
-    atk \
     eudev-libs \
     libxkbcommon \
     libxshmfence
