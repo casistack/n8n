@@ -37,6 +37,9 @@ services:
       - NODE_FUNCTION_ALLOW_BUILTIN=${NODE_FUNCTION_ALLOW_BUILTIN:-*}
       - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=${PUPPETEER_SKIP_CHROMIUM_DOWNLOAD:-true}
       - PUPPETEER_EXECUTABLE_PATH=${PUPPETEER_EXECUTABLE_PATH:-/usr/bin/chromium-browser}
+      - PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
+      - CHROME_BIN=${CHROME_BIN:-/usr/bin/chromium-browser}
+      - CHROME_PATH=${CHROME_PATH:-/usr/lib/chromium/}
     ports:
       - ":5678"
     volumes:
