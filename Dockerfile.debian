@@ -14,7 +14,8 @@ ENV NODE_ENV=production \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
     CHROME_BIN=/usr/bin/google-chrome-stable \
-    CHROME_PATH=/usr/lib/google-chrome/
+    CHROME_PATH=/usr/lib/google-chrome/ \
+    NVM_DIR=/home/node/.nvm
 
 # Install base dependencies
 RUN apt-get update && apt-get install -y \
@@ -52,25 +53,24 @@ RUN mkdir -p /home/node/.n8n && chown -R node:node /home/node/.n8n
 USER node
 WORKDIR /home/node
 
-# Install NVM
-ENV NVM_DIR /home/node/.nvm
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v$NVM_VERSION/install.sh | bash
-
-# Install Node.js and npm
-RUN . $NVM_DIR/nvm.sh && \
-    nvm install $NODE_VERSION && \
-    nvm alias default $NODE_VERSION && \
-    nvm use default
+# Install NVM, Node.js, and npm
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash \
+    && . $NVM_DIR/nvm.sh \
+    && nvm install $NODE_VERSION \
+    && nvm alias default $NODE_VERSION \
+    && nvm use default
 
 # Add node and npm to path so the commands are available
-ENV NODE_PATH $NVM_DIR/v$NODE_VERSION/lib/node_modules
-ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
+ENV PATH /home/node/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH
 
-# Install n8n and full-icu
+# Install n8n and full-icu locally
 RUN npm install n8n@${N8N_VERSION} full-icu && npm cache clean --force
 
 # Set up environment for n8n
-ENV NODE_ICU_DATA /home/node/.nvm/versions/node/v$NODE_VERSION/lib/node_modules/full-icu
+ENV NODE_ICU_DATA /home/node/.nvm/versions/node/v${NODE_VERSION}/lib/node_modules/full-icu
+
+# Add n8n to PATH
+ENV PATH /home/node/node_modules/.bin:$PATH
 
 # Copy and set permissions for entrypoint script
 COPY --chown=node:node docker-entrypoint.sh /home/node/
