@@ -1,0 +1,13 @@
+ARG N8N_VERSION=latest
+FROM docker.n8n.io/n8nio/n8n:${N8N_VERSION}
+
+USER root
+
+# Install additional dependencies
+RUN apk add --no-cache libstdc++ chromium nss freetype freetype-dev harfbuzz ca-certificates ttf-freefont glib
+
+# Set environment variables
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+USER node
