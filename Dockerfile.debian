@@ -35,7 +35,12 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
 
 # Set up n8n and full-icu
 RUN npm install -g n8n@${N8N_VERSION} full-icu && npm cache clean --force
-RUN ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n
+
+# Create symlink only if it doesn't exist
+RUN if [ ! -e /usr/local/bin/n8n ]; then ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n; fi
+
+# Check n8n path
+RUN which n8n
 
 # Set up environment for Puppeteer and Chrome
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
