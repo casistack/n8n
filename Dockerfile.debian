@@ -1,11 +1,9 @@
 FROM node:20-bullseye-slim
 
-# Accept N8N_VERSION as a build argument
-ARG N8N_VERSION=latest
+ARG N8N_VERSION
 
 # Check if N8N_VERSION is provided
 RUN if [ -z "$N8N_VERSION" ] ; then echo "The N8N_VERSION argument is missing!" ; exit 1; fi
-
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
@@ -25,6 +23,7 @@ RUN apt-get update && apt-get install -y \
     xauth \
     xvfb \
     tini \
+    graphicsmagick \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Chrome
@@ -36,11 +35,9 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
 # Set up n8n and full-icu
 RUN npm install -g n8n@${N8N_VERSION} full-icu && npm cache clean --force
 
-# Create symlink only if it doesn't exist
-RUN if [ ! -e /usr/local/bin/n8n ]; then ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n; fi
-
-# Check n8n path
-RUN which n8n
+# Ensure n8n is in PATH and executable
+RUN ln -sf /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
+    chmod +x /usr/local/bin/n8n
 
 # Set up environment for Puppeteer and Chrome
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -54,20 +51,21 @@ ENV NODE_ENV=production
 ENV N8N_PATH=/
 ENV GENERIC_TIMEZONE=Europe/London
 ENV TZ=Europe/London
+ENV PATH="/usr/local/bin:${PATH}"
 
 EXPOSE 5678
 
 # Set up directories
 RUN mkdir -p /home/node/.n8n && chown -R node:node /home/node/.n8n
-RUN mkdir -p /home/node/.n8n/custom/
 
-USER node
-WORKDIR /home/node
+WORKDIR /data
+RUN chown -R node:node /data
 
 # Copy and set permissions for entrypoint script
-COPY docker/images/n8n/docker-entrypoint.sh /
-USER root
+COPY docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
+
+# Switch to non-root user
 USER node
 
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
