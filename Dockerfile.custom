@@ -3,27 +3,23 @@ FROM docker.n8n.io/n8nio/n8n:${N8N_VERSION}
 
 USER root
 
-# Install additional dependencies
+# Install dependencies
 RUN apk add --no-cache \
-    libstdc++ \
+    dbus \
+    ttf-freefont \
     chromium \
     nss \
     freetype \
-    freetype-dev \
     harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    glib \
-    dbus \
+    alsa-lib \
     mesa-gl \
     mesa-egl \
     libxcomposite \
     libxdamage \
     libxrandr \
-    alsa-lib \
-    eudev-libs \
     libxkbcommon \
-    libxshmfence
+    libxshmfence \
+    xvfb-run
 
 # Set environment variables
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -31,5 +27,9 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ENV CHROME_BIN=/usr/bin/chromium-browser
 ENV CHROME_PATH=/usr/lib/chromium/
 ENV PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
+
+# Create a wrapper script to run Chromium with Xvfb
+RUN echo '#!/bin/sh\nxvfb-run -a --server-args="-screen 0 1280x800x24 -ac -nolisten tcp -dpi 96 +extension RANDR" chromium-browser "$@"' > /usr/local/bin/chromium-browser-xvfb \
+    && chmod +x /usr/local/bin/chromium-browser-xvfb
 
 USER node
