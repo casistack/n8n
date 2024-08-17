@@ -6,6 +6,8 @@ services:
       dockerfile: Dockerfile.debian
       args:
         - N8N_VERSION=${N8N_VERSION:-latest}
+				- NVM_VERSION=${NVM_VERSION:-0.39.3}
+		    - NODE_VERSION=${NODE_VERSIO:-20}
     restart: always
     environment:
       - DB_TYPE=postgresdb
