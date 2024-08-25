@@ -47,7 +47,8 @@ services:
     ports:
       - ":5678"  # Bind host port 5678 to container port 5678
     volumes:
-      - n8n_data_annex:/home/node/.n8n
+      #- n8n_data_annex:/home/node/.n8n
+			 - n8n_data_annex:/home/node/.n8n/data
     depends_on:
       - postgres
 
