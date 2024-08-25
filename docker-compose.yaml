@@ -45,9 +45,9 @@ services:
       - CHROME_PATH=/usr/lib/chromium/
       - PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
     ports:
-      - ":5678"  # Bind host port 5678 to container port 5678
+      - ":5678"
     volumes:
-			- n8n_data_annex:/home/node/.n8n/data
+      - n8n_data_annex:/home/node/.n8n/data
     depends_on:
       - postgres
 
@@ -59,7 +59,7 @@ services:
       - POSTGRES_USER=${DB_POSTGRESDB_USER:-n8n}
       - POSTGRES_PASSWORD=${DB_POSTGRESDB_PASSWORD}
     ports:
-      - ":5432"  # Bind host port 5432 to container port 5432
+      - ":5432"
     volumes:
       - postgres_data_n8n_annex:/var/lib/postgresql/data
 
