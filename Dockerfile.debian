@@ -47,6 +47,9 @@ RUN apt-get update && apt-get install -y chromium \
 RUN useradd -ms /bin/bash node
 RUN mkdir -p /home/node/.n8n && chown -R node:node /home/node/.n8n
 
+# Ensure custom nodes directory exists with correct permissions
+RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node/.n8n
+
 # Switch to node user
 USER node
 WORKDIR /home/node
@@ -90,7 +93,6 @@ RUN export NVM_DIR="$HOME/.nvm" \
     && n8n --version
 
 # Create custom nodes directory with correct permissions
-RUN chown -R node:node /home/node/.n8n/custom
 
 ENTRYPOINT ["/home/node/docker-entrypoint.sh"]
 CMD ["n8n", "start"]
