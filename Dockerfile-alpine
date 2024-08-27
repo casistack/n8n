@@ -1,0 +1,39 @@
+# Use the official n8n Alpine image as the base
+FROM n8nio/n8n:latest
+
+# Set environment variables
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    CHROME_BIN=/usr/bin/chromium-browser \
+    CHROME_PATH=/usr/lib/chromium/
+
+# Switch to root to install system dependencies
+USER root
+
+# Install Chromium and other necessary dependencies
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+
+# Switch back to the node user
+USER node
+
+# Set the working directory
+WORKDIR /home/node
+
+# Copy the custom entrypoint script
+COPY --chown=node:node docker-entrypoint-alpine.sh /
+
+# Make the entrypoint script executable
+RUN chmod +x /docker-entrypoint-alpine.sh
+
+# Set the entrypoint
+ENTRYPOINT ["tini", "--", "/docker-entrypoint-alpine.sh"]
+
+# Set the default command
+CMD ["n8n", "start"]
