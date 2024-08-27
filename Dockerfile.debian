@@ -54,6 +54,10 @@ RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node/.n8n
 USER node
 WORKDIR /home/node
 
+RUN apt-get update && apt-get install -y sudo && \
+    echo "node ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/node && \
+    chmod 0440 /etc/sudoers.d/node
+
 # Install NVM, Node.js, npm, and verify installation
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash \
     && export NVM_DIR="$HOME/.nvm" \
