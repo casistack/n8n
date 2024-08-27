@@ -85,7 +85,7 @@ install_packages() {
 }
 
 # Install packages from mypackages directory
-install_packages "/home/node/.n8n/data/mypackages" "/home/node/.n8n/nodes"
+install_packages "/data/mypackages" "/home/node/.n8n/nodes"
 
 # Execute the main command
 exec "$@"
