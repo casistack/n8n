@@ -47,16 +47,14 @@ RUN apt-get update && apt-get install -y chromium \
 RUN useradd -ms /bin/bash node
 RUN mkdir -p /home/node/.n8n && chown -R node:node /home/node/.n8n
 
-# Ensure custom nodes directory exists with correct permissions
-RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node/.n8n
+
 
 # Switch to node user
 USER node
 WORKDIR /home/node
 
-RUN apt-get update && apt-get install -y sudo && \
-    echo "node ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/node && \
-    chmod 0440 /etc/sudoers.d/node
+# Ensure custom nodes directory exists with correct permissions
+RUN mkdir -p /home/node/.n8n/custom
 
 # Install NVM, Node.js, npm, and verify installation
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash \
