@@ -1,6 +1,6 @@
-import type { User } from '@db/entities/User';
-import { setSamlLoginEnabled } from '@/sso/saml/samlHelpers';
-import { getCurrentAuthenticationMethod, setCurrentAuthenticationMethod } from '@/sso/ssoHelpers';
+import type { User } from '@/databases/entities/User';
+import { setSamlLoginEnabled } from '@/sso/saml/saml-helpers';
+import { getCurrentAuthenticationMethod, setCurrentAuthenticationMethod } from '@/sso/sso-helpers';
 
 import { randomEmail, randomName, randomValidPassword } from '../shared/random';
 import * as utils from '../shared/utils/';

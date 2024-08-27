@@ -3,9 +3,9 @@ import { In } from '@n8n/typeorm';
 import { DateTime } from 'luxon';
 
 import config from '@/config';
-import { WorkflowHistoryRepository } from '@db/repositories/workflowHistory.repository';
-import { License } from '@/License';
-import { WorkflowHistoryManager } from '@/workflows/workflowHistory/workflowHistoryManager.ee';
+import { WorkflowHistoryRepository } from '@/databases/repositories/workflow-history.repository';
+import { License } from '@/license';
+import { WorkflowHistoryManager } from '@/workflows/workflow-history/workflow-history-manager.ee';
 
 import { mockInstance } from '../shared/mocking';
 import * as testDb from './shared/testDb';

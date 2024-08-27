@@ -7,11 +7,11 @@ import type { FindOptionsWhere } from '@n8n/typeorm';
 import { In, Like, QueryFailedError } from '@n8n/typeorm';
 import { v4 as uuid } from 'uuid';
 
-import { ActiveWorkflowManager } from '@/ActiveWorkflowManager';
+import { ActiveWorkflowManager } from '@/active-workflow-manager';
 import config from '@/config';
-import { WorkflowEntity } from '@db/entities/WorkflowEntity';
-import { ExternalHooks } from '@/ExternalHooks';
-import { addNodeIds, replaceInvalidCredentials } from '@/WorkflowHelpers';
+import { WorkflowEntity } from '@/databases/entities/workflow-entity';
+import { ExternalHooks } from '@/external-hooks';
+import { addNodeIds, replaceInvalidCredentials } from '@/workflow-helpers';
 import type { WorkflowRequest } from '../../../types';
 import { projectScope, validCursor } from '../../shared/middlewares/global.middleware';
 import { encodeNextCursor } from '../../shared/services/pagination.service';
@@ -26,8 +26,8 @@ import {
 	updateTags,
 } from './workflows.service';
 import { WorkflowService } from '@/workflows/workflow.service';
-import { WorkflowHistoryService } from '@/workflows/workflowHistory/workflowHistory.service.ee';
-import { SharedWorkflowRepository } from '@/databases/repositories/sharedWorkflow.repository';
+import { WorkflowHistoryService } from '@/workflows/workflow-history/workflow-history.service.ee';
+import { SharedWorkflowRepository } from '@/databases/repositories/shared-workflow.repository';
 import { TagRepository } from '@/databases/repositories/tag.repository';
 import { WorkflowRepository } from '@/databases/repositories/workflow.repository';
 import { ProjectRepository } from '@/databases/repositories/project.repository';

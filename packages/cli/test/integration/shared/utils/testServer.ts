@@ -7,13 +7,13 @@ import { URL } from 'url';
 
 import config from '@/config';
 import { AUTH_COOKIE_NAME } from '@/constants';
-import type { User } from '@db/entities/User';
+import type { User } from '@/databases/entities/User';
 import { ControllerRegistry } from '@/decorators';
 import { rawBodyReader, bodyParser } from '@/middlewares';
 import { PostHogClient } from '@/posthog';
 import { Push } from '@/push';
-import { License } from '@/License';
-import { Logger } from '@/Logger';
+import { License } from '@/license';
+import { Logger } from '@/logger';
 import { AuthService } from '@/auth/auth.service';
 import type { APIRequest } from '@/requests';
 
@@ -158,7 +158,7 @@ export const setupTestServer = ({
 						break;
 
 					case 'oauth2':
-						await import('@/controllers/oauth/oAuth2Credential.controller');
+						await import('@/controllers/oauth/oauth2-credential.controller');
 						break;
 
 					case 'mfa':
@@ -166,24 +166,24 @@ export const setupTestServer = ({
 						break;
 
 					case 'ldap':
-						const { LdapService } = await import('@/Ldap/ldap.service.ee');
-						await import('@/Ldap/ldap.controller.ee');
+						const { LdapService } = await import('@/ldap/ldap.service.ee');
+						await import('@/ldap/ldap.controller.ee');
 						testServer.license.enable('feat:ldap');
 						await Container.get(LdapService).init();
 						break;
 
 					case 'saml':
-						const { setSamlLoginEnabled } = await import('@/sso/saml/samlHelpers');
+						const { setSamlLoginEnabled } = await import('@/sso/saml/saml-helpers');
 						await import('@/sso/saml/routes/saml.controller.ee');
 						await setSamlLoginEnabled(true);
 						break;
 
 					case 'sourceControl':
-						await import('@/environments/sourceControl/sourceControl.controller.ee');
+						await import('@/environments/source-control/source-control.controller.ee');
 						break;
 
 					case 'community-packages':
-						await import('@/controllers/communityPackages.controller');
+						await import('@/controllers/community-packages.controller');
 						break;
 
 					case 'me':
@@ -191,7 +191,7 @@ export const setupTestServer = ({
 						break;
 
 					case 'passwordReset':
-						await import('@/controllers/passwordReset.controller');
+						await import('@/controllers/password-reset.controller');
 						break;
 
 					case 'owner':
@@ -211,15 +211,15 @@ export const setupTestServer = ({
 						break;
 
 					case 'externalSecrets':
-						await import('@/ExternalSecrets/ExternalSecrets.controller.ee');
+						await import('@/external-secrets/external-secrets.controller.ee');
 						break;
 
 					case 'workflowHistory':
-						await import('@/workflows/workflowHistory/workflowHistory.controller.ee');
+						await import('@/workflows/workflow-history/workflow-history.controller.ee');
 						break;
 
 					case 'binaryData':
-						await import('@/controllers/binaryData.controller');
+						await import('@/controllers/binary-data.controller');
 						break;
 
 					case 'debug':
@@ -235,7 +235,7 @@ export const setupTestServer = ({
 						break;
 
 					case 'dynamic-node-parameters':
-						await import('@/controllers/dynamicNodeParameters.controller');
+						await import('@/controllers/dynamic-node-parameters.controller');
 						break;
 				}
 			}

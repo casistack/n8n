@@ -1,4 +1,4 @@
-import type { User } from '@db/entities/User';
+import type { User } from '@/databases/entities/User';
 
 import { createSuccessfulExecution, getAllExecutions } from './shared/db/executions';
 import { createMember, createOwner } from './shared/db/users';
@@ -8,7 +8,7 @@ import { setupTestServer } from './shared/utils';
 import { mockInstance } from '../shared/mocking';
 
 import { ConcurrencyControlService } from '@/concurrency/concurrency-control.service';
-import { WaitTracker } from '@/WaitTracker';
+import { WaitTracker } from '@/wait-tracker';
 import { createTeamProject, linkUserToProject } from './shared/db/projects';
 
 mockInstance(WaitTracker);

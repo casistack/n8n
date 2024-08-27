@@ -3,13 +3,13 @@ import { v4 as uuid } from 'uuid';
 import { ApplicationError, WorkflowActivationError, type INode } from 'n8n-workflow';
 
 import config from '@/config';
-import type { Project } from '@db/entities/Project';
-import { ProjectRepository } from '@db/repositories/project.repository';
-import type { User } from '@db/entities/User';
-import { WorkflowHistoryRepository } from '@db/repositories/workflowHistory.repository';
-import { ActiveWorkflowManager } from '@/ActiveWorkflowManager';
-import { License } from '@/License';
-import { UserManagementMailer } from '@/UserManagement/email';
+import type { Project } from '@/databases/entities/project';
+import { ProjectRepository } from '@/databases/repositories/project.repository';
+import type { User } from '@/databases/entities/User';
+import { WorkflowHistoryRepository } from '@/databases/repositories/workflow-history.repository';
+import { ActiveWorkflowManager } from '@/active-workflow-manager';
+import { License } from '@/license';
+import { UserManagementMailer } from '@/user-management/email';
 import type { WorkflowWithSharingsMetaDataAndCredentials } from '@/workflows/workflows.types';
 
 import { mockInstance } from '../../shared/mocking';

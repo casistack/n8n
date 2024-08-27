@@ -2,13 +2,13 @@ import type express from 'express';
 import { Container } from 'typedi';
 import { replaceCircularReferences } from 'n8n-workflow';
 
-import { ActiveExecutions } from '@/ActiveExecutions';
+import { ActiveExecutions } from '@/active-executions';
 import { validCursor } from '../../shared/middlewares/global.middleware';
 import type { ExecutionRequest } from '../../../types';
 import { getSharedWorkflowIds } from '../workflows/workflows.service';
 import { encodeNextCursor } from '../../shared/services/pagination.service';
 import { EventService } from '@/events/event.service';
-import { ExecutionRepository } from '@db/repositories/execution.repository';
+import { ExecutionRepository } from '@/databases/repositories/execution.repository';
 import { ConcurrencyControlService } from '@/concurrency/concurrency-control.service';
 
 export = {
