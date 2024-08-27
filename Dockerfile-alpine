@@ -19,6 +19,8 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont
 
+# Install additional npm packages needed for your custom node
+# Only include packages that are actually needed for your custom node
 
 # Switch back to the node user
 USER node
