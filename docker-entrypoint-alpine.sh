@@ -23,7 +23,7 @@ if [ -d /opt/custom-certificates ]; then
 fi
 
 # Check if n8n is available
-if ! command -v n8n &> /dev/null; then
+if ! command -v n8n > /dev/null 2>&1; then
     echo "Error: n8n command not found"
     exit 1
 fi
@@ -39,38 +39,17 @@ fi
 echo "Attempting to run n8n:"
 n8n --version
 
-# Function to compare versions
-version_gt() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" != "$1"; }
-
-# Function to extract version from filename
-extract_version() {
-    echo "$1" | sed -E 's/.*-([0-9]+\.[0-9]+\.[0-9]+)\.tgz$/\1/'
-}
-
-# Function to install packages
+# Simplified package installation
 install_packages() {
     local package_dir="$1"
     local install_dir="$2"
     
-    # Create an associative array to store the latest version of each package
-    declare -A latest_versions
-    # Check if there are any .tgz files in the package directory
-    if ls $package_dir/*.tgz 1> /dev/null 2>&1; then
+    if [ -d "$package_dir" ] && [ "$(ls -A $package_dir)" ]; then
         for package in $package_dir/*.tgz; do
-            base_name=$(basename "$package" .tgz | sed -E 's/-[0-9]+\.[0-9]+\.[0-9]+$//')
-            version=$(extract_version "$package")
-            
-            if [ -z "${latest_versions[$base_name]}" ] || version_gt "$version" "${latest_versions[$base_name]}"; then
-                latest_versions[$base_name]="$version"
-            fi
+            echo "Installing $package"
+            npm install --prefix "$install_dir" "$package"
         done
-        for base_name in "${!latest_versions[@]}"; do
-            latest_version="${latest_versions[$base_name]}"
-            latest_package="$package_dir/${base_name}-${latest_version}.tgz"
-            echo "Installing $base_name version $latest_version"
-            npm install --prefix $install_dir $latest_package
-        done
-        echo "Latest versions of custom packages installed/updated."
+        echo "Custom packages installed/updated."
     else
         echo "No custom packages found in $package_dir"
     fi
