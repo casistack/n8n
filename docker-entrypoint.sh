@@ -33,7 +33,6 @@ if ! command -v n8n &> /dev/null; then
     exit 1
 fi
 
-
 # Check if Chromium is available
 if [ -f "$PUPPETEER_EXECUTABLE_PATH" ]; then
   echo "Chromium found at $PUPPETEER_EXECUTABLE_PATH"
@@ -45,4 +44,48 @@ fi
 echo "Attempting to run n8n:"
 n8n --version
 
+# New package installation logic
+# Function to compare versions
+version_gt() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" != "$1"; }
+
+# Function to extract version from filename
+extract_version() {
+    echo "$1" | sed -E 's/.*-([0-9]+\.[0-9]+\.[0-9]+)\.tgz$/\1/'
+}
+
+# Function to install packages
+install_packages() {
+    local package_dir="$1"
+    local install_dir="$2"
+    
+    # Create an associative array to store the latest version of each package
+    declare -A latest_versions
+
+    # Check if there are any .tgz files in the package directory
+    if ls $package_dir/*.tgz 1> /dev/null 2>&1; then
+        for package in $package_dir/*.tgz; do
+            base_name=$(basename "$package" .tgz | sed -E 's/-[0-9]+\.[0-9]+\.[0-9]+$//')
+            version=$(extract_version "$package")
+            
+            if [[ -z "${latest_versions[$base_name]}" ]] || version_gt "$version" "${latest_versions[$base_name]}"; then
+                latest_versions[$base_name]="$version"
+            fi
+        done
+
+        for base_name in "${!latest_versions[@]}"; do
+            latest_version="${latest_versions[$base_name]}"
+            latest_package="$package_dir/${base_name}-${latest_version}.tgz"
+            echo "Installing $base_name version $latest_version"
+            npm install --prefix $install_dir $latest_package
+        done
+        echo "Latest versions of custom packages installed/updated."
+    else
+        echo "No custom packages found in $package_dir"
+    fi
+}
+
+# Install packages from mypackages directory
+install_packages "/home/node/.n8n/data/mypackages" "/home/node/.n8n/nodes"
+
+# Execute the main command
 exec "$@"
