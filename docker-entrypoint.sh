@@ -33,6 +33,12 @@ if ! command -v n8n &> /dev/null; then
     exit 1
 fi
 
+# Check and set correct permissions for the custom nodes directory
+if [ -d "/home/node/.n8n/nodes" ]; then
+  chown -R node:node /home/node/.n8n/nodes
+fi
+
+
 # Check if Chromium is available
 if [ -f "$PUPPETEER_EXECUTABLE_PATH" ]; then
   echo "Chromium found at $PUPPETEER_EXECUTABLE_PATH"
