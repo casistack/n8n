@@ -43,6 +43,7 @@ services:
       - N8N_AI_OPENAI_API_KEY=${N8N_AI_OPENAI_API_KEY}
       - N8N_REINSTALL_MISSING_PACKAGES=${N8N_REINSTALL_MISSING_PACKAGES:-false}
       - N8N_ENVIRONMENT=production
+			- N8N_CUSTOM_EXTENSIONS=${N8N_CUSTOM_EXTENSIONS:-/home/node/.n8n/custom}
       - CODE_ENABLE_STDOUT=${CODE_ENABLE_STDOUT:-true}
       - NODE_FUNCTION_ALLOW_BUILTIN=${NODE_FUNCTION_ALLOW_BUILTIN:-*}
       - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -55,6 +56,7 @@ services:
     volumes:
       - n8n_data_annex:/data
       - ./n8n:/home/node/.n8n
+			- ./custom:/home/node/.n8n/custom
     depends_on:
       - postgres
   postgres:
