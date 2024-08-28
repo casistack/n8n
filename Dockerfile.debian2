@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     build-essential \
     python3 \
-    && curl -fsSL https://deb.nodesource.com/setup_20.15.0.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g npm@latest pnpm \
     && rm -rf /var/lib/apt/lists/*
@@ -79,7 +79,7 @@ RUN apt-get update && apt-get install -y \
     xauth \
     xvfb \
     graphicsmagick \
-    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g npm@latest \
     && rm -rf /var/lib/apt/lists/*
