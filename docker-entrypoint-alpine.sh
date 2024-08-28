@@ -37,7 +37,7 @@ else
 fi
 
 # Set up Chromium flags
-export CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-accelerated-2d-canvas --no-first-run --no-zygote --single-process --disable-gpu"
+export CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu"
 
 # Configure Puppeteer to use these flags
 export PUPPETEER_ADDITIONAL_ARGS="$CHROMIUM_FLAGS"
