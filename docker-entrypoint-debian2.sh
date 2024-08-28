@@ -14,6 +14,10 @@ echo "NPM version: $(npm --version)"
 echo "NPM global packages:"
 npm list -g --depth=0
 
+# Check n8n module paths
+echo "n8n base nodes path: $(node -e "console.log(require.resolve('n8n-nodes-base'))")"
+echo "n8n core path: $(node -e "console.log(require.resolve('n8n-core'))")"
+
 # Function to compare versions
 version_gt() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" != "$1"; }
 
