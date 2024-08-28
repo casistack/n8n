@@ -47,7 +47,7 @@ RUN apt-get update && apt-get install -y chromium \
 # Create node user and set up directories
 RUN useradd -ms /bin/bash node
 #RUN mkdir -p /home/node/.n8n && chown -R node:node /home/node/.n8n
-RUN chown -R node:node /home/node/.n8n
+#RUN chown -R node:node /home/node/.n8n
 
 
 # Switch to node user
