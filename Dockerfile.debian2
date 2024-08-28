@@ -94,6 +94,7 @@ COPY --from=builder /compiled /usr/local/lib/node_modules/n8n
 
 # Copy custom entrypoint script
 COPY docker-entrypoint-debian2.sh /
+RUN chmod +x /docker-entrypoint-debian2.sh
 
 # Set up n8n
 RUN cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - \
