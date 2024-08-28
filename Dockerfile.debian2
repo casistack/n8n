@@ -107,6 +107,7 @@ RUN cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - \
 #RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node/.n8n
 
 ENV SHELL=/bin/bash
+ENV NODE_PATH /usr/local/lib/node_modules
 
 USER node
 
