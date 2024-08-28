@@ -3,7 +3,7 @@ services:
   n8n:
     build:
       context: .
-      dockerfile: Dockerfile.debian
+      dockerfile: Dockerfile.debian2
       args:
         - N8N_VERSION=${N8N_VERSION:-latest}
         - NVM_VERSION=${NVM_VERSION:-0.39.3}
