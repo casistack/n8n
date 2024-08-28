@@ -22,6 +22,7 @@ services:
       - N8N_VERSION=${N8N_VERSION:-latest}
       - NODE_ENV=${NODE_ENV:-production}
       - NODE_FUNCTION_ALLOW_EXTERNAL=${NODE_FUNCTION_ALLOW_EXTERNAL:-crypto}
+      - NODE_VERSION=${NODE_VERSION:-20}
       - WEBHOOK_URL=${WEBHOOK_URL}
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/London}
       - TZ=${TZ:-Europe/London}
