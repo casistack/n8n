@@ -19,6 +19,7 @@ services:
       - DB_POSTGRESDB_SCHEMA=public
       - N8N_PORT=${N8N_PORT:-5678}
       - N8N_PATH=${N8N_PATH:-/}
+      - N8N_VERSION=${N8N_VERSION:-latest}
       - NODE_ENV=${NODE_ENV:-production}
       - NODE_FUNCTION_ALLOW_EXTERNAL=${NODE_FUNCTION_ALLOW_EXTERNAL:-crypto}
       - WEBHOOK_URL=${WEBHOOK_URL}
