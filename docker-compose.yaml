@@ -61,6 +61,7 @@ services:
       - POSTGRES_PASSWORD=${DB_POSTGRESDB_PASSWORD}
     ports:
       - ":5432"
+      - "12000:10000"
     volumes:
       - postgres_data_n8n_annex:/var/lib/postgresql/data
 volumes:
