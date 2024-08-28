@@ -106,10 +106,14 @@ RUN cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - \
 # Create custom nodes directory
 #RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node/.n8n
 
+
 ENV SHELL=/bin/bash
 ENV NODE_PATH /usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
 
 USER node
+
+# Verify n8n installation
+RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');"
 
 # Expose n8n port
 EXPOSE 5678
