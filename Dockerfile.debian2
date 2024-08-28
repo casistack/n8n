@@ -36,8 +36,6 @@ RUN node .github/scripts/trim-fe-packageJson.js
 # Delete any source code, source-mapping, or typings
 RUN find . -type f -name "*.ts" -o -name "*.js.map" -o -name "*.vue" -o -name "tsconfig.json" -o -name "*.tsbuildinfo" | xargs rm -rf
 
-# Create node user and set up directories
-RUN useradd -ms /bin/bash node
 
 # Deploy the `n8n` package into /compiled
 RUN mkdir /compiled
@@ -87,6 +85,8 @@ RUN apt-get update && apt-get install -y \
     && npm install -g npm@latest \
     && rm -rf /var/lib/apt/lists/*
 
+# Create node user and set up directories
+RUN useradd -ms /bin/bash node
 WORKDIR /home/node
 
 # Copy n8n from builder stage
