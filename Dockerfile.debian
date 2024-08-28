@@ -48,27 +48,6 @@ RUN apt-get update && apt-get install -y chromium \
 RUN useradd -ms /bin/bash node
 RUN mkdir -p /home/node/.n8n && chown -R node:node /home/node/.n8n
 
-# Add GPG key signed by Webmin
-RUN wget -qO - http://www.webmin.com/jcameron-key.asc | apt-key add -
-
-# Add GPG key signed by Webmin
-RUN wget -qO - http://www.webmin.com/jcameron-key.asc | apt-key add -
-
-# Integrate Webmin repository
-RUN echo "deb http://download.webmin.com/download/repository sarge contrib" > /etc/apt/sources.list.d/webmin.list
-
-# Update package list and install Webmin
-RUN apt-get update && \
-    apt-get install -y webmin && \
-    sed -i 's/ssl=1/ssl=0/' /etc/webmin/miniserv.conf
-
-RUN  echo "webmin: ALL" >> /etc/hosts.allow
-
-# Update hba_conf in Webmin PostgreSQL configuration
-RUN sed -i 's#hba_conf=.*#hba_conf=/var/lib/postgresql/data/pg_hba.conf#' /etc/webmin/postgresql/config
-RUN sed -i 's/ipv6=1/ipv6=0/' /etc/webmin/miniserv.conf
-
-
 
 # Switch to node user
 USER node
