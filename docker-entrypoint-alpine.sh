@@ -37,10 +37,14 @@ else
 fi
 
 # Set up Chromium flags
-export CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu"
+export CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu --user-data-dir=/home/node/.config/chromium"
 
 # Configure Puppeteer to use these flags
 export PUPPETEER_ADDITIONAL_ARGS="$CHROMIUM_FLAGS"
+
+# Ensure the Chromium user data directory exists and has correct permissions
+mkdir -p /home/node/.config/chromium
+chown -R node:node /home/node/.config/chromium
 
 echo "Attempting to run n8n:"
 n8n --version
