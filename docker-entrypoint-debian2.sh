@@ -22,40 +22,24 @@ echo "n8n core path: $(node -e "console.log(require.resolve('n8n-core'))")"
 # Function to compare versions
 version_gt() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" != "$1"; }
 
-# Function to extract version from filename
-extract_version() {
-    echo "$1" | sed -E 's/.*-([0-9]+\.[0-9]+\.[0-9]+)\.tgz$/\1/'
-}
-
-# Function to install packages
-install_packages() {
-    local package_dir="$1"
-    local install_dir="$2"
+install_custom_packages() {
+    local package_dir="/data/mypackages"
+    local install_dir="/home/node/.n8n/custom"
     
-    declare -A latest_versions
-    if ls $package_dir/*.tgz 1> /dev/null 2>&1; then
+    if [ -d "$package_dir" ] && [ "$(ls -A $package_dir)" ]; then
         for package in $package_dir/*.tgz; do
-            base_name=$(basename "$package" .tgz | sed -E 's/-[0-9]+\.[0-9]+\.[0-9]+$//')
-            version=$(extract_version "$package")
-            
-            if [[ -z "${latest_versions[$base_name]}" ]] || version_gt "$version" "${latest_versions[$base_name]}"; then
-                latest_versions[$base_name]="$version"
+            if [ -f "$package" ]; then
+                echo "Installing custom package: $(basename "$package")"
+                npm install --no-save --prefix "$install_dir" "$package"
             fi
         done
-        for base_name in "${!latest_versions[@]}"; do
-            latest_version="${latest_versions[$base_name]}"
-            latest_package="$package_dir/${base_name}-${latest_version}.tgz"
-            echo "Installing $base_name version $latest_version"
-            npm install --prefix $install_dir $latest_package
-        done
-        echo "Latest versions of custom packages installed/updated."
+        echo "Custom packages installed."
     else
         echo "No custom packages found in $package_dir"
     fi
 }
 
-# Install packages from mypackages directory
-install_packages "/data/mypackages" "/home/node/.n8n/nodes"
+install_custom_packages
 
 # Check if Chromium is available
 if [ -f "$PUPPETEER_EXECUTABLE_PATH" ]; then
