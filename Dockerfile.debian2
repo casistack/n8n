@@ -1,11 +1,12 @@
-NODE_VERSION=20.15.0
-N8N_VERSION=latest
+# This line ensures that any prepended environment variables don't cause a parse error
+FROM scratch AS empty
 
 # 1. Create an image to build n8n
 FROM --platform=linux/amd64 debian:bullseye-slim AS builder
 
 # Use ARG to set NODE_VERSION in this build stage
-ARG NODE_VERSION
+ARG NODE_VERSION=20.15.0
+ARG N8N_VERSION=latest
 RUN echo "Building with Node.js version at line 9: $NODE_VERSION"
 
 # Install Node.js and necessary build tools
