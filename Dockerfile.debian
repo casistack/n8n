@@ -35,6 +35,7 @@ RUN apt-get update && apt-get install -y \
     xauth \
     xvfb \
     tini \
+    sudo \
     graphicsmagick \
     curl \
     && rm -rf /var/lib/apt/lists/*
