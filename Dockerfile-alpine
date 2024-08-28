@@ -11,7 +11,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 USER root
 
 # Install Chromium and other necessary dependencies
-RUN apk add --no-cache \
+RUN apk update && apk add --no-cache \
     chromium \
     nss \
     freetype \
@@ -20,26 +20,11 @@ RUN apk add --no-cache \
     ttf-freefont \
     xvfb \
     dbus \
-    fontconfig \
     udev \
     libstdc++ \
     libgcc \
-    libx11 \
-    libxcomposite \
-    libxdamage \
-    libxext \
-    libxfixes \
-    libxi \
-    libxrandr \
-    libxrender \
-    libxss \
-    libxtst \
     mesa-gl \
-    pango \
-    alsa-lib \
-    at-spi2-atk \
-    atk \
-    libgbm
+    alsa-lib
 
 # Install additional npm packages needed for your custom node
 #RUN npm install -g \
