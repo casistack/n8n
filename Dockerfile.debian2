@@ -1,5 +1,5 @@
 # This line ensures that any prepended environment variables don't cause a parse error
-FROM scratch AS empty
+#FROM scratch AS empty
 
 # 1. Create an image to build n8n
 FROM --platform=linux/amd64 debian:bullseye-slim AS builder
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     build-essential \
     python3 \
-    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_20.15.0.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g npm@latest pnpm \
     && rm -rf /var/lib/apt/lists/*
