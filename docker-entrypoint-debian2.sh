@@ -12,6 +12,7 @@ echo "n8n directory contents: $(ls -l $(dirname $(which n8n)))"
 echo "Node version: $(node --version)"
 echo "NPM version: $(npm --version)"
 echo "NPM global packages:"
+echo "NODE_PATH: $NODE_PATH"
 npm list -g --depth=0
 
 # Check n8n module paths
