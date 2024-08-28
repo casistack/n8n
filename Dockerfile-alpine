@@ -17,10 +17,39 @@ RUN apk add --no-cache \
     freetype \
     harfbuzz \
     ca-certificates \
-    ttf-freefont
+    ttf-freefont \
+    xvfb \
+    dbus \
+    fontconfig \
+    udev \
+    libstdc++ \
+    libgcc \
+    libx11 \
+    libxcomposite \
+    libxdamage \
+    libxext \
+    libxfixes \
+    libxi \
+    libxrandr \
+    libxrender \
+    libxss \
+    libxtst \
+    mesa-gl \
+    pango \
+    alsa-lib \
+    at-spi2-atk \
+    atk \
+    libgbm
 
 # Install additional npm packages needed for your custom node
-# Only include packages that are actually needed for your custom node
+#RUN npm install -g \
+    #puppeteer \
+    #whatsapp-web.js
+
+# Create a chrome user
+RUN addgroup -S chrome && adduser -S -G chrome chrome \
+    && mkdir -p /home/chrome/Downloads \
+    && chown -R chrome:chrome /home/chrome
 
 # Switch back to the node user
 USER node
