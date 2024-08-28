@@ -50,6 +50,7 @@ services:
       - ":5678"
     volumes:
       - n8n_data_annex:/data
+			- ./n8n:/home/node/.n8n
     depends_on:
       - postgres
   postgres:
@@ -60,7 +61,7 @@ services:
       - POSTGRES_USER=${DB_POSTGRESDB_USER:-n8n}
       - POSTGRES_PASSWORD=${DB_POSTGRESDB_PASSWORD}
     ports:
-      - ":5432"
+      - "5433:5432"
       - "12000:10000"
     volumes:
       - postgres_data_n8n_annex:/var/lib/postgresql/data
