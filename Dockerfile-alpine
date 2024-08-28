@@ -5,7 +5,8 @@ FROM n8nio/n8n:latest
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     CHROME_BIN=/usr/bin/chromium-browser \
-    CHROME_PATH=/usr/lib/chromium/
+    CHROME_PATH=/usr/lib/chromium/ \
+    PUPPETEER_CACHE_DIR=/home/node/.cache/puppeteer
 
 # Switch to root to install system dependencies
 USER root
@@ -27,14 +28,13 @@ RUN apk update && apk add --no-cache \
     alsa-lib
 
 # Install additional npm packages needed for your custom node
-#RUN npm install -g \
-    #puppeteer \
-    #whatsapp-web.js
+RUN npm install -g \
+    puppeteer \
+    whatsapp-web.js
 
-# Create a chrome user
-RUN addgroup -S chrome && adduser -S -G chrome chrome \
-    && mkdir -p /home/chrome/Downloads \
-    && chown -R chrome:chrome /home/chrome
+# Create necessary directories and set permissions
+RUN mkdir -p /home/node/.cache/puppeteer \
+    && chown -R node:node /home/node/.cache
 
 # Switch back to the node user
 USER node
