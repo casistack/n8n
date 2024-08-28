@@ -49,6 +49,7 @@ RUN echo "Running with Node.js version: $NODE_VERSION and n8n version at line 47
 
 ENV NODE_ENV=production
 ENV N8N_VERSION=${N8N_VERSION}
+ENV NODE_VERSION=${NODE_VERSION}
 
 # Set environment variables as in your docker-compose.yaml
 ENV N8N_PATH=/ \
