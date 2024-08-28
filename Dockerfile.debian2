@@ -1,12 +1,12 @@
-ARG NODE_VERSION=20
-ARG N8N_VERSION=latest
+NODE_VERSION=20.15.0
+N8N_VERSION=latest
 
 # 1. Create an image to build n8n
 FROM --platform=linux/amd64 debian:bullseye-slim AS builder
 
 # Use ARG to set NODE_VERSION in this build stage
 ARG NODE_VERSION
-RUN echo "Building with Node.js version: $NODE_VERSION"
+RUN echo "Building with Node.js version at line 9: $NODE_VERSION"
 
 # Install Node.js and necessary build tools
 RUN apt-get update && apt-get install -y \
@@ -44,7 +44,7 @@ FROM debian:bullseye-slim
 
 ARG NODE_VERSION
 ARG N8N_VERSION
-RUN echo "Running with Node.js version: $NODE_VERSION and n8n version: $N8N_VERSION"
+RUN echo "Running with Node.js version: $NODE_VERSION and n8n version at line 47: $N8N_VERSION"
 
 ENV NODE_ENV=production
 ENV N8N_VERSION=${N8N_VERSION}
