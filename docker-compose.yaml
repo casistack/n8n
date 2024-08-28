@@ -6,7 +6,6 @@ services:
       dockerfile: Dockerfile.debian2
       args:
         - N8N_VERSION=${N8N_VERSION:-latest}
-        - NVM_VERSION=${NVM_VERSION:-0.39.3}
         - NODE_VERSION=${NODE_VERSION:-20}
     restart: always
     environment:
@@ -41,7 +40,6 @@ services:
       - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL:-https://localhost:5678}
       - N8N_AI_ENABLED=${N8N_AI_ENABLED:-false}
       - N8N_AI_OPENAI_API_KEY=${N8N_AI_OPENAI_API_KEY}
-      - N8N_REINSTALL_MISSING_PACKAGES=${N8N_REINSTALL_MISSING_PACKAGES:-false}
       - N8N_ENVIRONMENT=production
       - N8N_CUSTOM_EXTENSIONS=${N8N_CUSTOM_EXTENSIONS:-/home/node/.n8n/custom}
       - CODE_ENABLE_STDOUT=${CODE_ENABLE_STDOUT:-true}
@@ -54,9 +52,8 @@ services:
     ports:
       - ":5678"
     volumes:
-      - n8n_data_annex:/data
       - ./n8n:/home/node/.n8n
-      - ./custom:/home/node/.n8n/custom
+      - ./custom:/data/mypackages
     depends_on:
       - postgres
   postgres:
