@@ -98,17 +98,27 @@ COPY docker-entrypoint-debian2.sh /
 RUN chmod +x /docker-entrypoint-debian2.sh
 
 # Set up n8n
+#RUN cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - \
+    #&& ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n \
+   #&& mkdir -p /home/node/.n8n/custom \
+    #&& chown -R node:node .n8n
+
 RUN cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - \
     && ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n \
-    && mkdir -p /home/node/.n8n/custom \
-    && chown -R node:node .n8n
+    && chown -R node:node /home/node/.n8n
+
+# Install custom nodes
+COPY ./custom-nodes /tmp/custom-nodes
+RUN cd /tmp/custom-nodes && npm install
+RUN cp -r /tmp/custom-nodes/* /home/node/.n8n/custom/
+RUN chown -R node:node /home/node/.n8n/custom
 
 # Create custom nodes directory
 #RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node/.n8n
 
 
 ENV SHELL=/bin/bash
-ENV NODE_PATH /usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
+ENV NODE_PATH /usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules:/home/node/.n8n/custom/node_modules
 
 USER node
 
