@@ -107,11 +107,6 @@ RUN cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - \
     && ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n \
     && chown -R node:node /home/node/.n8n
 
-# Install custom nodes
-COPY ./custom-nodes /tmp/custom-nodes
-RUN cd /tmp/custom-nodes && npm install
-RUN cp -r /tmp/custom-nodes/* /home/node/.n8n/custom/
-RUN chown -R node:node /home/node/.n8n/custom
 
 # Create custom nodes directory
 #RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node/.n8n
