@@ -20,26 +20,26 @@ echo "n8n base nodes path: $(node -e "console.log(require.resolve('n8n-nodes-bas
 echo "n8n core path: $(node -e "console.log(require.resolve('n8n-core'))")"
 
 # Function to compare versions
-version_gt() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" != "$1"; }
+##version_gt() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" != "$1"; }
 
-install_custom_packages() {
-    local package_dir="/data/mypackages"
-    local install_dir="/home/node/.n8n/custom"
+##install_custom_packages() {
+    ##local package_dir="/data/mypackages"
+    ##local install_dir="/home/node/.n8n/custom"
     
-    if [ -d "$package_dir" ] && [ "$(ls -A $package_dir)" ]; then
-        for package in $package_dir/*.tgz; do
-            if [ -f "$package" ]; then
-                echo "Installing custom package: $(basename "$package")"
-                npm install --no-save --prefix "$install_dir" "$package"
-            fi
-        done
-        echo "Custom packages installed."
-    else
-        echo "No custom packages found in $package_dir"
-    fi
-}
+    ##if [ -d "$package_dir" ] && [ "$(ls -A $package_dir)" ]; then
+      ##  for package in $package_dir/*.tgz; do
+        ##    if [ -f "$package" ]; then
+          ##      echo "Installing custom package: $(basename "$package")"
+            ##    npm install --no-save --prefix "$install_dir" "$package"
+            ##fi
+        ##done
+        ##echo "Custom packages installed."
+    ##else
+      ##  echo "No custom packages found in $package_dir"
+    ##fi
+##}
 
-install_custom_packages
+##install_custom_packages
 
 # Check if Chromium is available
 if [ -f "$PUPPETEER_EXECUTABLE_PATH" ]; then
