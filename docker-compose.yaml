@@ -23,6 +23,7 @@ services:
       - N8N_FORCE_MIGRATION=${N8N_FORCE_MIGRATION:-false}
       - NODE_FUNCTION_ALLOW_EXTERNAL=${NODE_FUNCTION_ALLOW_EXTERNAL:-crypto}
       - NODE_VERSION=${NODE_VERSION:-20}
+      - NODE_OPTIONS=--experimental-modules
       - WEBHOOK_URL=${WEBHOOK_URL}
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/London}
       - TZ=${TZ:-Europe/London}
