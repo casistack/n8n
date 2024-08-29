@@ -124,4 +124,4 @@ RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n mo
 EXPOSE 5678
 
 ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
-CMD ["/usr/local/bin/n8n", "start"]
+CMD ["n8n", "start"]
