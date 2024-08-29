@@ -24,6 +24,7 @@ services:
       - NODE_FUNCTION_ALLOW_EXTERNAL=${NODE_FUNCTION_ALLOW_EXTERNAL:-crypto}
       - NODE_VERSION=${NODE_VERSION:-20}
       - NODE_OPTIONS=--experimental-modules
+      - NODE_FUNCTION_ALLOW_EXTERNAL=*
       - WEBHOOK_URL=${WEBHOOK_URL}
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/London}
       - TZ=${TZ:-Europe/London}
