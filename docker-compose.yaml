@@ -7,7 +7,7 @@ services:
       args:
         - N8N_VERSION=${N8N_VERSION:-latest}
         - NODE_VERSION=${NODE_VERSION:-20}
-				- N8N_ENVIRONMENT=production
+        - N8N_ENVIRONMENT=production
     restart: always
     environment:
       - DB_TYPE=postgresdb
