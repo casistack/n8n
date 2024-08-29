@@ -54,8 +54,7 @@ services:
     ports:
       - ":5678"
     volumes:
-      - ./n8n:/home/node/.n8n
-      - ./custom:/data/mypackages
+      - ./n8n:/home/node/.n8n/nodes
     depends_on:
       - postgres
   postgres:
