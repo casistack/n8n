@@ -45,7 +45,7 @@ RUN NODE_ENV=production pnpm --filter=n8n --prod --no-optional deploy /compiled
 FROM debian:bullseye-slim
 
 ARG NODE_VERSION
-ARG N8N_VERSION
+ARG N8N_VERSION=${N8N_VERSION}
 RUN echo "Running with Node.js version: $NODE_VERSION and n8n version at line 47: $N8N_VERSION"
 
 ENV NODE_ENV=production
