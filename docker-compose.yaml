@@ -57,6 +57,7 @@ services:
       - ":5678"
     volumes:
       - n8n_data_annex:/data2
+      - ./n8n/nodes:/home/node/.n8n/nodes
     depends_on:
       - postgres
   postgres:
