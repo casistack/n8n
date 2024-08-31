@@ -68,6 +68,8 @@ ENV N8N_PATH=/ \
 # Install Node.js and other necessary tools
 RUN apt-get update && apt-get install -y \
     curl \
+    iputils-ping \
+    nano \
     gnupg \
     tini \
     chromium \
