@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pnpm and turbo
-RUN npm install -g pnpm turbo
+# Install pnpm, turbo, and typescript globally
+RUN npm install -g pnpm turbo typescript
 
 # Copy package.json, pnpm files, and patches first
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
