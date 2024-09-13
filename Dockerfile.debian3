@@ -15,29 +15,25 @@ RUN apt-get update && apt-get install -y \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pnpm
-RUN npm install -g pnpm
-
-# Copy package.json and pnpm-lock.yaml first to leverage Docker cache
-COPY package.json pnpm-lock.yaml ./
+# Copy package.json and package-lock.json first to leverage Docker cache
+COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN npm ci
 
 # Copy the rest of the source code
 COPY . .
 
 # Build the application
-RUN pnpm build
+RUN npm run build
 
 # Trim package.json and delete unnecessary files
-RUN jq 'del(.pnpm.patchedDependencies)' package.json > package.json.tmp && mv package.json.tmp package.json \
+RUN jq 'del(.devDependencies) | del(.scripts)' package.json > package.json.tmp && mv package.json.tmp package.json \
     && node .github/scripts/trim-fe-packageJson.js \
     && find . -type f \( -name "*.ts" -o -name "*.js.map" -o -name "*.vue" -o -name "tsconfig.json" -o -name "*.tsbuildinfo" \) -delete
 
-# Deploy the `n8n` package into /compiled
-RUN mkdir /compiled \
-    && NODE_ENV=production pnpm --filter=n8n --prod --no-optional deploy /compiled
+# Install production dependencies
+RUN npm ci --only=production
 
 # 2. Create the final image
 FROM node:${NODE_VERSION}-bullseye-slim
@@ -79,11 +75,11 @@ WORKDIR /home/node
 RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node
 
 # Copy n8n from builder stage
-COPY --from=builder --chown=node:node /compiled /usr/local/lib/node_modules/n8n
+COPY --from=builder --chown=node:node /src /usr/local/lib/node_modules/n8n
 
 # Set up n8n
 RUN cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - \
-    && ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n
+    && ln -s /usr/local/lib/node_modules/n8n/packages/cli/bin/n8n /usr/local/bin/n8n
 
 # Copy custom entrypoint script
 COPY --chown=node:node docker-entrypoint-debian2.sh /
