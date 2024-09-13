@@ -1,0 +1,108 @@
+# Use ARG at the top level for use across multiple stages
+ARG NODE_VERSION=20.15.0
+ARG N8N_VERSION
+
+# 1. Create an image to build n8n
+FROM --platform=linux/amd64 node:${NODE_VERSION}-bullseye-slim AS builder
+
+# Set working directory
+WORKDIR /src
+
+# Install necessary build tools and jq
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy package.json and pnpm-lock.yaml first to leverage Docker cache
+COPY package.json pnpm-lock.yaml ./
+
+# Install dependencies
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
+    pnpm install --frozen-lockfile
+
+# Copy the rest of the source code
+COPY . .
+
+# Build the application
+RUN pnpm build
+
+# Trim package.json and delete unnecessary files
+RUN jq 'del(.pnpm.patchedDependencies)' package.json > package.json.tmp && mv package.json.tmp package.json \
+    && node .github/scripts/trim-fe-packageJson.js \
+    && find . -type f \( -name "*.ts" -o -name "*.js.map" -o -name "*.vue" -o -name "tsconfig.json" -o -name "*.tsbuildinfo" \) -delete
+
+# Deploy the `n8n` package into /compiled
+RUN mkdir /compiled \
+    && NODE_ENV=production pnpm --filter=n8n --prod --no-optional deploy /compiled
+
+# 2. Create the final image
+FROM node:${NODE_VERSION}-bullseye-slim
+
+# Set ARGs and ENVs
+ARG N8N_VERSION
+ENV NODE_ENV=production \
+    N8N_VERSION=${N8N_VERSION} \
+    N8N_RELEASE_TYPE=stable \
+    N8N_PATH=/ \
+    GENERIC_TIMEZONE=Europe/London \
+    TZ=Europe/London \
+    DEBIAN_FRONTEND=noninteractive \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    CHROME_BIN=/usr/bin/chromium \
+    CHROME_PATH=/usr/lib/chromium/
+
+# Install necessary tools and dependencies
+RUN apt-get update && apt-get install -y \
+    tini \
+    chromium \
+    libgtk2.0-0 \
+    libgtk-3-0 \
+    libgbm-dev \
+    libnotify-dev \
+    libgconf-2-4 \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libxtst6 \
+    xauth \
+    xvfb \
+    graphicsmagick \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up directories and permissions
+WORKDIR /home/node
+RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node
+
+# Copy n8n from builder stage
+COPY --from=builder --chown=node:node /compiled /usr/local/lib/node_modules/n8n
+
+# Set up n8n
+RUN cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - \
+    && ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n
+
+# Copy custom entrypoint script
+COPY --chown=node:node docker-entrypoint-debian2.sh /
+RUN chmod +x /docker-entrypoint-debian2.sh
+
+# Set environment variables
+ENV SHELL=/bin/bash \
+    NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
+
+# Switch to non-root user
+USER node
+
+# Verify n8n installation
+RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');"
+
+# Expose n8n port
+EXPOSE 5678
+
+ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
+CMD ["n8n", "start"]
