@@ -1,42 +1,39 @@
 # Use ARG at the top level for use across multiple stages
 ARG NODE_VERSION=20.15.0
-ARG N8N_VERSION
 
 # 1. Create an image to build n8n
-FROM --platform=linux/amd64 node:${NODE_VERSION}-bullseye-slim AS builder
+FROM node:${NODE_VERSION}-bullseye-slim AS builder
 
-# Set working directory
-WORKDIR /src
+# Set ARGs and ENVs
+ARG N8N_VERSION
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
 
-# Install necessary build tools and jq
+# Install necessary build tools and dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     python3 \
+    git \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pnpm, turbo, and typescript globally
-RUN npm install -g pnpm turbo typescript
+# Install pnpm
+RUN npm install -g pnpm
+
+WORKDIR /usr/src/app
 
 # Copy package.json, pnpm files, and patches first
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
 
-# Install dependencies
-RUN pnpm fetch
+# Install all dependencies (including devDependencies)
+RUN pnpm install --frozen-lockfile
 
 # Copy the rest of the source code
 COPY . .
 
-# Install project dependencies
-RUN pnpm install --frozen-lockfile
-
 # Build the application
 RUN pnpm build
-
-# Trim package.json and delete unnecessary files
-RUN jq 'del(.devDependencies) | del(.scripts)' package.json > package.json.tmp && mv package.json.tmp package.json \
-    && find . -type f \( -name "*.ts" -o -name "*.js.map" -o -name "*.vue" -o -name "tsconfig.json" -o -name "*.tsbuildinfo" \) -delete
 
 # Install production dependencies
 RUN pnpm install --prod --frozen-lockfile
@@ -44,15 +41,18 @@ RUN pnpm install --prod --frozen-lockfile
 # 2. Create the final image
 FROM node:${NODE_VERSION}-bullseye-slim
 
-# Set ARGs and ENVs
 ARG N8N_VERSION
-ENV NODE_ENV=production \
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV} \
     N8N_VERSION=${N8N_VERSION} \
-    N8N_RELEASE_TYPE=stable \
-    N8N_PATH=/ \
+    N8N_METRICS=${N8N_METRICS} \
+    NODE_VERSION=${NODE_VERSION} \
+    PNPM_HOME="/root/.local/share/pnpm" \
+    PATH="$PNPM_HOME:$PATH" \
+    N8N_PATH=/usr/local/lib/node_modules/n8n \
+    N8N_CONFIG_FILES=/root/.n8n/config.json \
     GENERIC_TIMEZONE=Europe/London \
     TZ=Europe/London \
-    DEBIAN_FRONTEND=noninteractive \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     CHROME_BIN=/usr/bin/chromium \
@@ -60,49 +60,33 @@ ENV NODE_ENV=production \
 
 # Install necessary tools and dependencies
 RUN apt-get update && apt-get install -y \
+    graphicsmagick \
     tini \
     chromium \
-    libgtk2.0-0 \
-    libgtk-3-0 \
-    libgbm-dev \
-    libnotify-dev \
-    libgconf-2-4 \
-    libnss3 \
-    libxss1 \
-    libasound2 \
-    libxtst6 \
-    xauth \
-    xvfb \
-    graphicsmagick \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up directories and permissions
-WORKDIR /home/node
-RUN mkdir -p /home/node/.n8n/custom && chown -R node:node /home/node
+# Install pnpm
+RUN npm install -g pnpm
 
-# Copy n8n from builder stage
-COPY --from=builder --chown=node:node /src /usr/local/lib/node_modules/n8n
+WORKDIR /usr/src/app
+
+# Copy built n8n from builder stage
+COPY --from=builder /usr/src/app ./
 
 # Set up n8n
-RUN cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - \
-    && ln -s /usr/local/lib/node_modules/n8n/packages/cli/bin/n8n /usr/local/bin/n8n
+RUN ln -s /usr/src/app/packages/cli/bin/n8n /usr/bin/n8n
 
 # Copy custom entrypoint script
-COPY --chown=node:node docker-entrypoint-debian2.sh /
+COPY docker-entrypoint-debian2.sh /
 RUN chmod +x /docker-entrypoint-debian2.sh
 
-# Set environment variables
-ENV SHELL=/bin/bash \
-    NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
+# Healthcheck so that the container can be restarted if n8n stops running
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 --start-period=10s \
+  CMD curl -f 'http://localhost:5678/healthz' || exit 1
 
-# Switch to non-root user
-USER node
-
-# Verify n8n installation
-RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');"
-
-# Expose n8n port
-EXPOSE 5678
+EXPOSE 5678/tcp
 
 ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
+
 CMD ["n8n", "start"]
