@@ -12,6 +12,7 @@ RUN echo "Building with Node.js version at line 9: $NODE_VERSION"
 # Install Node.js and necessary build tools
 RUN apt-get update && apt-get install -y \
     curl \
+    ffmpeg \
     gnupg \
     build-essential \
     python3 \
@@ -68,6 +69,7 @@ ENV N8N_PATH=/ \
 # Install Node.js and other necessary tools
 RUN apt-get update && apt-get install -y \
     curl \
+    ffmpeg \
     iputils-ping \
     nano \
     gnupg \
