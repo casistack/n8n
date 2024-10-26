@@ -1,13 +1,14 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'path';
-import { createHash } from 'node:crypto';
+
 import type { Scenario, ScenarioManifest } from '@/types/scenario';
 
 export class ScenarioLoader {
 	/**
 	 * Loads all scenarios from the given path
 	 */
-	loadAll(pathToScenarios: string): Scenario[] {
+	loadAll(pathToScenarios: string, filter?: string): Scenario[] {
 		pathToScenarios = path.resolve(pathToScenarios);
 		const scenarioFolders = fs
 			.readdirSync(pathToScenarios, { withFileTypes: true })
@@ -17,6 +18,9 @@ export class ScenarioLoader {
 		const scenarios: Scenario[] = [];
 
 		for (const folder of scenarioFolders) {
+			if (filter && !folder.toLowerCase().includes(filter.toLowerCase())) {
+				continue;
+			}
 			const scenarioPath = path.join(pathToScenarios, folder);
 			const manifestFileName = `${folder}.manifest.json`;
 			const scenarioManifestPath = path.join(pathToScenarios, folder, manifestFileName);

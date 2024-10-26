@@ -23,6 +23,7 @@ import type { ChatRequest } from '@/types/assistant.types';
 import InlineAskAssistantButton from 'n8n-design-system/components/InlineAskAssistantButton/InlineAskAssistantButton.vue';
 import { useUIStore } from '@/stores/ui.store';
 import { isCommunityPackageName } from '@/utils/nodeTypesUtils';
+import { useAIAssistantHelpers } from '@/composables/useAIAssistantHelpers';
 
 type Props = {
 	// TODO: .node can be undefined
@@ -34,6 +35,7 @@ const props = defineProps<Props>();
 const clipboard = useClipboard();
 const toast = useToast();
 const i18n = useI18n();
+const assistantHelpers = useAIAssistantHelpers();
 
 const nodeTypesStore = useNodeTypesStore();
 const ndvStore = useNDVStore();
@@ -119,37 +121,16 @@ const isAskAssistantAvailable = computed(() => {
 		return false;
 	}
 	const isCustomNode = node.value.type === undefined || isCommunityPackageName(node.value.type);
-	return assistantStore.canShowAssistantButtonsOnCanvas && !isCustomNode;
+
+	return assistantStore.canShowAssistantButtonsOnCanvas && !isCustomNode && !nodeIsHidden();
 });
 
 const assistantAlreadyAsked = computed(() => {
 	return assistantStore.isNodeErrorActive({
-		error: simplifyErrorForAssistant(props.error),
+		error: assistantHelpers.simplifyErrorForAssistant(props.error),
 		node: props.error.node || ndvStore.activeNode,
 	});
 });
-
-function simplifyErrorForAssistant(
-	error: NodeError | NodeApiError | NodeOperationError,
-): ChatRequest.ErrorContext['error'] {
-	const simple: ChatRequest.ErrorContext['error'] = {
-		name: error.name,
-		message: error.message,
-	};
-	if ('type' in error) {
-		simple.type = error.type;
-	}
-	if ('description' in error && error.description) {
-		simple.description = error.description;
-	}
-	if (error.stack) {
-		simple.stack = error.stack;
-	}
-	if ('lineNumber' in error) {
-		simple.lineNumber = error.lineNumber;
-	}
-	return simple;
-}
 
 function nodeVersionTag(nodeType: NodeError['node']): string {
 	if (!nodeType || ('hidden' in nodeType && nodeType.hidden)) {
@@ -404,6 +385,11 @@ function copySuccess() {
 	});
 }
 
+function nodeIsHidden() {
+	const nodeType = nodeTypesStore.getNodeType(node?.value.type);
+	return nodeType?.hidden ?? false;
+}
+
 async function onAskAssistantClick() {
 	const { message, lineNumber, description } = props.error;
 	const sessionInProgress = !assistantStore.isSessionEnded;
@@ -445,7 +431,7 @@ async function onAskAssistantClick() {
 				v-if="error.description || error.context?.descriptionKey"
 				data-test-id="node-error-description"
 				class="node-error-view__header-description"
-				v-html="getErrorDescription()"
+				v-n8n-html="getErrorDescription()"
 			></div>
 			<div
 				v-if="isAskAssistantAvailable"

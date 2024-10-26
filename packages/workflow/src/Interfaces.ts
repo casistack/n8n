@@ -1,29 +1,30 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import type { CallbackManager as CallbackManagerLC } from '@langchain/core/callbacks/manager';
+import type { AxiosProxyConfig } from 'axios';
 import type * as express from 'express';
 import type FormData from 'form-data';
 import type { PathLike } from 'fs';
 import type { IncomingHttpHeaders } from 'http';
-import type { SecureContextOptions } from 'tls';
-import type { Readable } from 'stream';
-import type { URLSearchParams } from 'url';
 import type { RequestBodyMatcher } from 'nock';
 import type { Client as SSHClient } from 'ssh2';
+import type { Readable } from 'stream';
+import type { SecureContextOptions } from 'tls';
+import type { URLSearchParams } from 'url';
 
-import type { AuthenticationMethod } from './Authentication';
 import type { CODE_EXECUTION_MODES, CODE_LANGUAGES, LOG_LEVELS } from './Constants';
 import type { IDeferredPromise } from './DeferredPromise';
-import type { ExecutionStatus } from './ExecutionStatus';
+import type { ExecutionCancelledError } from './errors';
 import type { ExpressionError } from './errors/expression.error';
-import type { Workflow } from './Workflow';
+import type { NodeApiError } from './errors/node-api.error';
+import type { NodeOperationError } from './errors/node-operation.error';
 import type { WorkflowActivationError } from './errors/workflow-activation.error';
 import type { WorkflowOperationError } from './errors/workflow-operation.error';
+import type { ExecutionStatus } from './ExecutionStatus';
+import type { Result } from './result';
+import type { Workflow } from './Workflow';
+import type { EnvProviderState } from './WorkflowDataProxyEnvProvider';
 import type { WorkflowHooks } from './WorkflowHooks';
-import type { ExecutionCancelledError } from './errors';
-import type { NodeOperationError } from './errors/node-operation.error';
-import type { NodeApiError } from './errors/node-api.error';
-import type { AxiosProxyConfig } from 'axios';
-import type { CallbackManager as CallbackManagerLC } from '@langchain/core/callbacks/manager';
 
 export interface IAdditionalCredentialOptions {
 	oauth2?: IOAuth2Options;
@@ -315,6 +316,7 @@ export interface ICredentialType {
 	name: string;
 	displayName: string;
 	icon?: Icon;
+	iconColor?: ThemeIconColor;
 	iconUrl?: Themed<string>;
 	extends?: string[];
 	properties: INodeProperties[];
@@ -328,6 +330,7 @@ export interface ICredentialType {
 	test?: ICredentialTestRequest;
 	genericAuth?: boolean;
 	httpRequestNode?: ICredentialHttpRequestNode;
+	supportedNodes?: string[];
 }
 
 export interface ICredentialTypes {
@@ -764,6 +767,48 @@ export interface BinaryHelperFunctions {
 	}>;
 }
 
+export type DeduplicationScope = 'node' | 'workflow';
+export type DeduplicationItemTypes = string | number;
+export type DeduplicationMode = 'entries' | 'latestIncrementalKey' | 'latestDate';
+
+export interface IDeduplicationOutput {
+	new: DeduplicationItemTypes[];
+	processed: DeduplicationItemTypes[];
+}
+
+export interface IDeduplicationOutputItems {
+	new: IDataObject[];
+	processed: IDataObject[];
+}
+
+export interface ICheckProcessedOptions {
+	mode: DeduplicationMode;
+	maxEntries?: number;
+}
+
+export interface DeduplicationHelperFunctions {
+	checkProcessedAndRecord(
+		items: DeduplicationItemTypes[],
+		scope: DeduplicationScope,
+		options: ICheckProcessedOptions,
+	): Promise<IDeduplicationOutput>;
+	checkProcessedItemsAndRecord(
+		propertyName: string,
+		items: IDataObject[],
+		scope: DeduplicationScope,
+		options: ICheckProcessedOptions,
+	): Promise<IDeduplicationOutputItems>;
+	removeProcessed(
+		items: DeduplicationItemTypes[],
+		scope: DeduplicationScope,
+		options: ICheckProcessedOptions,
+	): Promise<void>;
+	clearAllProcessedItems(scope: DeduplicationScope, options: ICheckProcessedOptions): Promise<void>;
+	getProcessedDataCount(
+		scope: DeduplicationScope,
+		options: ICheckProcessedOptions,
+	): Promise<number>;
+}
 export interface NodeHelperFunctions {
 	copyBinaryFile(filePath: string, fileName: string, mimeType?: string): Promise<IBinaryData>;
 }
@@ -937,6 +982,7 @@ export type IExecuteFunctions = ExecuteFunctions.GetNodeParameterFn &
 		helpers: RequestHelperFunctions &
 			BaseHelperFunctions &
 			BinaryHelperFunctions &
+			DeduplicationHelperFunctions &
 			FileSystemHelperFunctions &
 			SSHTunnelFunctions &
 			JsonHelperFunctions & {
@@ -951,6 +997,12 @@ export type IExecuteFunctions = ExecuteFunctions.GetNodeParameterFn &
 			};
 
 		getParentCallbackManager(): CallbackManager | undefined;
+
+		startJob<T = unknown, E = unknown>(
+			jobType: string,
+			settings: unknown,
+			itemIndex: number,
+		): Promise<Result<T, E>>;
 	};
 
 export interface IExecuteSingleFunctions extends BaseExecutionFunctions {
@@ -1059,6 +1111,7 @@ export interface IWebhookFunctions extends FunctionsBaseWithRequiredKeys<'getMod
 		options?: IGetNodeParameterOptions,
 	): NodeParameterValueType | object;
 	getNodeWebhookUrl: (name: string) => string | undefined;
+	evaluateExpression(expression: string, itemIndex?: number): NodeParameterValueType;
 	getParamsData(): object;
 	getQueryData(): object;
 	getRequestObject(): express.Request;
@@ -1618,7 +1671,7 @@ export interface IWorkflowIssues {
 	[key: string]: INodeIssues;
 }
 
-export type NodeIconColor =
+export type ThemeIconColor =
 	| 'gray'
 	| 'black'
 	| 'blue'
@@ -1643,7 +1696,7 @@ export interface INodeTypeBaseDescription {
 	displayName: string;
 	name: string;
 	icon?: Icon;
-	iconColor?: NodeIconColor;
+	iconColor?: ThemeIconColor;
 	iconUrl?: Themed<string>;
 	badgeIconUrl?: Themed<string>;
 	group: string[];
@@ -1974,7 +2027,7 @@ export interface IWebhookResponseData {
 }
 
 export type WebhookResponseData = 'allEntries' | 'firstEntryJson' | 'firstEntryBinary' | 'noData';
-export type WebhookResponseMode = 'onReceived' | 'lastNode' | 'responseNode';
+export type WebhookResponseMode = 'onReceived' | 'lastNode' | 'responseNode' | 'formPage';
 
 export interface INodeTypes {
 	getByName(nodeType: string): INodeType | IVersionedNodeType;
@@ -2121,6 +2174,7 @@ export interface IWorkflowBase {
 	name: string;
 	active: boolean;
 	createdAt: Date;
+	startedAt?: Date;
 	updatedAt: Date;
 	nodes: INode[];
 	connections: IConnections;
@@ -2151,6 +2205,10 @@ export interface IWorkflowExecutionDataProcess {
 	destinationNode?: string;
 	restartExecutionId?: string;
 	executionMode: WorkflowExecuteMode;
+	/**
+	 * The data that is sent in the body of the webhook that started this
+	 * execution.
+	 */
 	executionData?: IRunExecutionData;
 	runData?: IRunData;
 	pinData?: IPinData;
@@ -2160,6 +2218,15 @@ export interface IWorkflowExecutionDataProcess {
 	workflowData: IWorkflowBase;
 	userId?: string;
 	projectId?: string;
+	/**
+	 * Defines which version of the partial execution flow is used.
+	 * Possible values are:
+	 *  0 - use the old flow
+	 *  1 - use the new flow
+	 * -1 - the backend chooses which flow based on the environment variable
+	 *      PARTIAL_EXECUTION_VERSION_DEFAULT
+	 */
+	partialExecutionVersion?: string;
 }
 
 export interface ExecuteWorkflowOptions {
@@ -2224,6 +2291,27 @@ export interface IWorkflowExecuteAdditionalData {
 	secretsHelpers: SecretsHelpersBase;
 	logAiEvent: (eventName: AiEvent, payload: AiEventPayload) => void;
 	parentCallbackManager?: CallbackManager;
+	startAgentJob<T, E = unknown>(
+		additionalData: IWorkflowExecuteAdditionalData,
+		jobType: string,
+		settings: unknown,
+		executeFunctions: IExecuteFunctions,
+		inputData: ITaskDataConnections,
+		node: INode,
+		workflow: Workflow,
+		runExecutionData: IRunExecutionData,
+		runIndex: number,
+		itemIndex: number,
+		activeNodeName: string,
+		connectionInputData: INodeExecutionData[],
+		siblingParameters: INodeParameters,
+		mode: WorkflowExecuteMode,
+		envProviderState: EnvProviderState,
+		executeData?: IExecuteData,
+		defaultReturnRunIndex?: number,
+		selfData?: IDataObject,
+		contextNodeName?: string,
+	): Promise<Result<T, E>>;
 }
 
 export type WorkflowExecuteMode =
@@ -2290,7 +2378,7 @@ export interface WorkflowTestData {
 	nock?: {
 		baseUrl: string;
 		mocks: Array<{
-			method: 'get' | 'post';
+			method: 'delete' | 'get' | 'post' | 'put';
 			path: string;
 			requestBody?: RequestBodyMatcher;
 			statusCode: number;
@@ -2395,6 +2483,8 @@ export interface INodeGraphItem {
 	toolSettings?: IDataObject; //various langchain tool's settings
 	sql?: string; //merge node combineBySql, cloud only
 	workflow_id?: string; //@n8n/n8n-nodes-langchain.toolWorkflow and n8n-nodes-base.executeWorkflow
+	runs?: number;
+	items_total?: number;
 }
 
 export interface INodeNameIndex {
@@ -2405,16 +2495,6 @@ export interface INodesGraphResult {
 	nodeGraph: INodesGraph;
 	nameIndices: INodeNameIndex;
 	webhookNodeNames: string[];
-}
-
-export interface ITelemetryClientConfig {
-	url: string;
-	key: string;
-}
-
-export interface ITelemetrySettings {
-	enabled: boolean;
-	config?: ITelemetryClientConfig;
 }
 
 export interface FeatureFlags {
@@ -2459,6 +2539,7 @@ export interface ExecutionSummary {
 	retryOf?: string | null;
 	retrySuccessId?: string | null;
 	waitTill?: Date;
+	createdAt?: Date;
 	startedAt: Date;
 	stoppedAt?: Date;
 	workflowId: string;
@@ -2504,6 +2585,18 @@ export interface ResourceMapperField {
 	readOnly?: boolean;
 }
 
+export type FormFieldsParameter = Array<{
+	fieldLabel: string;
+	fieldType?: string;
+	requiredField?: boolean;
+	fieldOptions?: { values: Array<{ option: string }> };
+	multiselect?: boolean;
+	multipleFiles?: boolean;
+	acceptFileTypes?: string;
+	formatDate?: string;
+	placeholder?: string;
+}>;
+
 export type FieldTypeMap = {
 	// eslint-disable-next-line id-denylist
 	boolean: boolean;
@@ -2519,6 +2612,7 @@ export type FieldTypeMap = {
 	options: any;
 	url: string;
 	jwt: string;
+	'form-fields': FormFieldsParameter;
 };
 
 export type FieldType = keyof FieldTypeMap;
@@ -2598,19 +2692,6 @@ export interface ExecutionFilters {
 	workflowId?: number | string;
 }
 
-export interface IVersionNotificationSettings {
-	enabled: boolean;
-	endpoint: string;
-	infoUrl: string;
-}
-
-export interface IUserManagementSettings {
-	quota: number;
-	showSetupOnFirstLoad?: boolean;
-	smtpSetup: boolean;
-	authenticationMethod: AuthenticationMethod;
-}
-
 export type NpsSurveyRespondedState = { lastShownAt: number; responded: true };
 export type NpsSurveyWaitingState = {
 	lastShownAt: number;
@@ -2628,157 +2709,49 @@ export interface IUserSettings {
 	npsSurvey?: NpsSurveyState;
 }
 
-export interface IPublicApiSettings {
-	enabled: boolean;
-	latestVersion: number;
-	path: string;
-	swaggerUi: {
-		enabled: boolean;
+export interface IProcessedDataConfig {
+	availableModes: string;
+	mode: string;
+}
+
+export interface IDataDeduplicator {
+	checkProcessedAndRecord(
+		items: DeduplicationItemTypes[],
+		context: DeduplicationScope,
+		contextData: ICheckProcessedContextData,
+		options: ICheckProcessedOptions,
+	): Promise<IDeduplicationOutput>;
+
+	removeProcessed(
+		items: DeduplicationItemTypes[],
+		context: DeduplicationScope,
+		contextData: ICheckProcessedContextData,
+		options: ICheckProcessedOptions,
+	): Promise<void>;
+
+	clearAllProcessedItems(
+		context: DeduplicationScope,
+		contextData: ICheckProcessedContextData,
+		options: ICheckProcessedOptions,
+	): Promise<void>;
+	getProcessedDataCount(
+		context: DeduplicationScope,
+		contextData: ICheckProcessedContextData,
+		options: ICheckProcessedOptions,
+	): Promise<number>;
+}
+
+export interface ICheckProcessedContextData {
+	node?: INode;
+	workflow: {
+		id: string;
+		active: boolean;
 	};
 }
 
 export type ExpressionEvaluatorType = 'tmpl' | 'tournament';
 
 export type N8nAIProviderType = 'openai' | 'unknown';
-
-export interface IN8nUISettings {
-	isDocker?: boolean;
-	databaseType: 'sqlite' | 'mariadb' | 'mysqldb' | 'postgresdb';
-	endpointForm: string;
-	endpointFormTest: string;
-	endpointFormWaiting: string;
-	endpointWebhook: string;
-	endpointWebhookTest: string;
-	saveDataErrorExecution: WorkflowSettings.SaveDataExecution;
-	saveDataSuccessExecution: WorkflowSettings.SaveDataExecution;
-	saveManualExecutions: boolean;
-	saveExecutionProgress: boolean;
-	executionTimeout: number;
-	maxExecutionTimeout: number;
-	workflowCallerPolicyDefaultOption: WorkflowSettings.CallerPolicy;
-	oauthCallbackUrls: {
-		oauth1: string;
-		oauth2: string;
-	};
-	timezone: string;
-	urlBaseWebhook: string;
-	urlBaseEditor: string;
-	versionCli: string;
-	nodeJsVersion: string;
-	concurrency: number;
-	authCookie: {
-		secure: boolean;
-	};
-	binaryDataMode: 'default' | 'filesystem' | 's3';
-	releaseChannel: 'stable' | 'beta' | 'nightly' | 'dev';
-	n8nMetadata?: {
-		userId?: string;
-		[key: string]: string | number | undefined;
-	};
-	versionNotifications: IVersionNotificationSettings;
-	instanceId: string;
-	telemetry: ITelemetrySettings;
-	posthog: {
-		enabled: boolean;
-		apiHost: string;
-		apiKey: string;
-		autocapture: boolean;
-		disableSessionRecording: boolean;
-		debug: boolean;
-	};
-	personalizationSurveyEnabled: boolean;
-	defaultLocale: string;
-	userManagement: IUserManagementSettings;
-	sso: {
-		saml: {
-			loginLabel: string;
-			loginEnabled: boolean;
-		};
-		ldap: {
-			loginLabel: string;
-			loginEnabled: boolean;
-		};
-	};
-	publicApi: IPublicApiSettings;
-	workflowTagsDisabled: boolean;
-	logLevel: LogLevel;
-	hiringBannerEnabled: boolean;
-	previewMode: boolean;
-	templates: {
-		enabled: boolean;
-		host: string;
-	};
-	missingPackages?: boolean;
-	executionMode: 'regular' | 'queue';
-	pushBackend: 'sse' | 'websocket';
-	communityNodesEnabled: boolean;
-	aiAssistant: {
-		enabled: boolean;
-	};
-	deployment: {
-		type: string | 'default' | 'n8n-internal' | 'cloud' | 'desktop_mac' | 'desktop_win';
-	};
-	isNpmAvailable: boolean;
-	allowedModules: {
-		builtIn?: string[];
-		external?: string[];
-	};
-	enterprise: {
-		sharing: boolean;
-		ldap: boolean;
-		saml: boolean;
-		logStreaming: boolean;
-		advancedExecutionFilters: boolean;
-		variables: boolean;
-		sourceControl: boolean;
-		auditLogs: boolean;
-		externalSecrets: boolean;
-		showNonProdBanner: boolean;
-		debugInEditor: boolean;
-		binaryDataS3: boolean;
-		workflowHistory: boolean;
-		workerView: boolean;
-		advancedPermissions: boolean;
-		projects: {
-			team: {
-				limit: number;
-			};
-		};
-	};
-	hideUsagePage: boolean;
-	license: {
-		planName?: string;
-		consumerId: string;
-		environment: 'development' | 'production' | 'staging';
-	};
-	variables: {
-		limit: number;
-	};
-	expressions: {
-		evaluator: ExpressionEvaluatorType;
-	};
-	mfa: {
-		enabled: boolean;
-	};
-	banners: {
-		dismissed: string[];
-	};
-	ai: {
-		enabled: boolean;
-	};
-	workflowHistory: {
-		pruneTime: number;
-		licensePruneTime: number;
-	};
-	pruning: {
-		isEnabled: boolean;
-		maxAge: number;
-		maxCount: number;
-	};
-	security: {
-		blockFileAccessToN8nFiles: boolean;
-	};
-}
 
 export interface SecretsHelpersBase {
 	update(): Promise<void>;
@@ -2799,8 +2772,6 @@ export type BannerName =
 	| 'EMAIL_CONFIRMATION';
 
 export type Functionality = 'regular' | 'configuration-node' | 'pairedItem';
-
-export type Result<T, E> = { ok: true; result: T } | { ok: false; error: E };
 
 export type CallbackManager = CallbackManagerLC;
 

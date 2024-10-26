@@ -1,17 +1,22 @@
 import { Command, Flags } from '@oclif/core';
-import { ScenarioLoader } from '@/scenario/scenario-loader';
-import { ScenarioRunner } from '@/test-execution/scenario-runner';
+
+import { testScenariosPath } from '@/config/common-flags';
 import { N8nApiClient } from '@/n8n-api-client/n8n-api-client';
 import { ScenarioDataFileLoader } from '@/scenario/scenario-data-loader';
+import { ScenarioLoader } from '@/scenario/scenario-loader';
 import type { K6Tag } from '@/test-execution/k6-executor';
 import { K6Executor } from '@/test-execution/k6-executor';
-import { testScenariosPath } from '@/config/common-flags';
+import { ScenarioRunner } from '@/test-execution/scenario-runner';
 
 export default class RunCommand extends Command {
 	static description = 'Run all (default) or specified test scenarios';
 
 	static flags = {
 		testScenariosPath,
+		scenarioFilter: Flags.string({
+			char: 'f',
+			description: 'Filter scenarios by name',
+		}),
 		scenarioNamePrefix: Flags.string({
 			description: 'Prefix for the scenario name',
 			default: 'Unnamed',
@@ -94,7 +99,7 @@ export default class RunCommand extends Command {
 			flags.scenarioNamePrefix,
 		);
 
-		const allScenarios = scenarioLoader.loadAll(flags.testScenariosPath);
+		const allScenarios = scenarioLoader.loadAll(flags.testScenariosPath, flags.scenarioFilter);
 
 		await scenarioRunner.runManyScenarios(allScenarios);
 	}

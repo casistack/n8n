@@ -1,16 +1,17 @@
 import type { DateTime } from 'luxon';
+
+import { ApplicationError } from '../errors/application.error';
 import type {
 	FilterConditionValue,
 	FilterOperatorType,
 	FilterOptionsValue,
 	FilterValue,
 	INodeProperties,
-	Result,
 	ValidationResult,
 } from '../Interfaces';
-import { validateFieldType } from '../TypeValidation';
 import * as LoggerProxy from '../LoggerProxy';
-import { ApplicationError } from '../errors/application.error';
+import type { Result } from '../result';
+import { validateFieldType } from '../TypeValidation';
 
 type FilterConditionMetadata = {
 	index: number;
@@ -24,7 +25,7 @@ export class FilterError extends ApplicationError {
 		message: string,
 		readonly description: string,
 	) {
-		super(message);
+		super(message, { level: 'warning' });
 	}
 }
 
