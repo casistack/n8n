@@ -17,14 +17,16 @@ const MOCK_ACTIVATION_KEY = 'activation-key';
 const MOCK_FEATURE_FLAG = 'feat:sharing';
 const MOCK_MAIN_PLAN_ID = '1b765dc4-d39d-4ffe-9885-c56dd67c4b26';
 
-describe('License', () => {
-	beforeAll(() => {
-		config.set('license.serverUrl', MOCK_SERVER_URL);
-		config.set('license.autoRenewEnabled', true);
-		config.set('license.autoRenewOffset', MOCK_RENEW_OFFSET);
-		config.set('license.tenantId', 1);
-	});
+const licenseConfig: GlobalConfig['license'] = {
+	serverUrl: MOCK_SERVER_URL,
+	autoRenewalEnabled: true,
+	autoRenewOffset: MOCK_RENEW_OFFSET,
+	activationKey: MOCK_ACTIVATION_KEY,
+	tenantId: 1,
+	cert: '',
+};
 
+describe('License', () => {
 	let license: License;
 	const instanceSettings = mock<InstanceSettings>({
 		instanceId: MOCK_INSTANCE_ID,
@@ -32,8 +34,11 @@ describe('License', () => {
 	});
 
 	beforeEach(async () => {
-		const globalConfig = mock<GlobalConfig>({ multiMainSetup: { enabled: false } });
-		license = new License(mockLogger(), instanceSettings, mock(), mock(), mock(), globalConfig);
+		const globalConfig = mock<GlobalConfig>({
+			license: licenseConfig,
+			multiMainSetup: { enabled: false },
+		});
+		license = new License(mockLogger(), instanceSettings, mock(), mock(), globalConfig);
 		await license.init();
 	});
 
@@ -65,8 +70,7 @@ describe('License', () => {
 			mock<InstanceSettings>({ instanceType: 'worker' }),
 			mock(),
 			mock(),
-			mock(),
-			mock(),
+			mock<GlobalConfig>({ license: licenseConfig }),
 		);
 		await license.init();
 		expect(LicenseManager).toHaveBeenCalledWith(
@@ -192,17 +196,22 @@ describe('License', () => {
 });
 
 describe('License', () => {
-	beforeEach(() => {
-		config.load(config.default);
-	});
-
 	describe('init', () => {
 		describe('in single-main setup', () => {
 			describe('with `license.autoRenewEnabled` enabled', () => {
 				it('should enable renewal', async () => {
-					const globalConfig = mock<GlobalConfig>({ multiMainSetup: { enabled: false } });
+					const globalConfig = mock<GlobalConfig>({
+						license: licenseConfig,
+						multiMainSetup: { enabled: false },
+					});
 
-					await new License(mockLogger(), mock(), mock(), mock(), mock(), globalConfig).init();
+					await new License(
+						mockLogger(),
+						mock<InstanceSettings>({ instanceType: 'main' }),
+						mock(),
+						mock(),
+						globalConfig,
+					).init();
 
 					expect(LicenseManager).toHaveBeenCalledWith(
 						expect.objectContaining({ autoRenewEnabled: true, renewOnInit: true }),
@@ -212,9 +221,13 @@ describe('License', () => {
 
 			describe('with `license.autoRenewEnabled` disabled', () => {
 				it('should disable renewal', async () => {
-					config.set('license.autoRenewEnabled', false);
-
-					await new License(mockLogger(), mock(), mock(), mock(), mock(), mock()).init();
+					await new License(
+						mockLogger(),
+						mock<InstanceSettings>({ instanceType: 'main' }),
+						mock(),
+						mock(),
+						mock(),
+					).init();
 
 					expect(LicenseManager).toHaveBeenCalledWith(
 						expect.objectContaining({ autoRenewEnabled: false, renewOnInit: false }),
@@ -228,11 +241,13 @@ describe('License', () => {
 				test.each(['unset', 'leader', 'follower'])(
 					'if %s status, should disable removal',
 					async (status) => {
-						const globalConfig = mock<GlobalConfig>({ multiMainSetup: { enabled: true } });
+						const globalConfig = mock<GlobalConfig>({
+							license: { ...licenseConfig, autoRenewalEnabled: false },
+							multiMainSetup: { enabled: true },
+						});
 						config.set('multiMainSetup.instanceType', status);
-						config.set('license.autoRenewEnabled', false);
 
-						await new License(mockLogger(), mock(), mock(), mock(), mock(), globalConfig).init();
+						await new License(mockLogger(), mock(), mock(), mock(), globalConfig).init();
 
 						expect(LicenseManager).toHaveBeenCalledWith(
 							expect.objectContaining({ autoRenewEnabled: false, renewOnInit: false }),
@@ -243,11 +258,13 @@ describe('License', () => {
 
 			describe('with `license.autoRenewEnabled` enabled', () => {
 				test.each(['unset', 'follower'])('if %s status, should disable removal', async (status) => {
-					const globalConfig = mock<GlobalConfig>({ multiMainSetup: { enabled: true } });
+					const globalConfig = mock<GlobalConfig>({
+						license: { ...licenseConfig, autoRenewalEnabled: false },
+						multiMainSetup: { enabled: true },
+					});
 					config.set('multiMainSetup.instanceType', status);
-					config.set('license.autoRenewEnabled', false);
 
-					await new License(mockLogger(), mock(), mock(), mock(), mock(), globalConfig).init();
+					await new License(mockLogger(), mock(), mock(), mock(), globalConfig).init();
 
 					expect(LicenseManager).toHaveBeenCalledWith(
 						expect.objectContaining({ autoRenewEnabled: false, renewOnInit: false }),
@@ -255,10 +272,13 @@ describe('License', () => {
 				});
 
 				it('if leader status, should enable renewal', async () => {
-					const globalConfig = mock<GlobalConfig>({ multiMainSetup: { enabled: true } });
+					const globalConfig = mock<GlobalConfig>({
+						license: licenseConfig,
+						multiMainSetup: { enabled: true },
+					});
 					config.set('multiMainSetup.instanceType', 'leader');
 
-					await new License(mockLogger(), mock(), mock(), mock(), mock(), globalConfig).init();
+					await new License(mockLogger(), mock(), mock(), mock(), globalConfig).init();
 
 					expect(LicenseManager).toHaveBeenCalledWith(
 						expect.objectContaining({ autoRenewEnabled: true, renewOnInit: true }),
@@ -270,7 +290,7 @@ describe('License', () => {
 
 	describe('reinit', () => {
 		it('should reinitialize license manager', async () => {
-			const license = new License(mockLogger(), mock(), mock(), mock(), mock(), mock());
+			const license = new License(mockLogger(), mock(), mock(), mock(), mock());
 			await license.init();
 
 			const initSpy = jest.spyOn(license, 'init');

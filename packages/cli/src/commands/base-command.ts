@@ -6,13 +6,9 @@ import {
 	InstanceSettings,
 	ObjectStoreService,
 	DataDeduplicationService,
+	ErrorReporter,
 } from 'n8n-core';
-import {
-	ApplicationError,
-	ensureError,
-	ErrorReporterProxy as ErrorReporter,
-	sleep,
-} from 'n8n-workflow';
+import { ApplicationError, ensureError, sleep } from 'n8n-workflow';
 import { Container } from 'typedi';
 
 import type { AbstractServer } from '@/abstract-server';
@@ -21,7 +17,7 @@ import { LICENSE_FEATURES, inDevelopment, inTest } from '@/constants';
 import * as CrashJournal from '@/crash-journal';
 import * as Db from '@/db';
 import { getDataDeduplicationService } from '@/deduplication';
-import { initErrorHandling } from '@/error-reporting';
+import { DeprecationService } from '@/deprecation/deprecation.service';
 import { MessageEventBus } from '@/eventbus/message-event-bus/message-event-bus';
 import { TelemetryEventRelay } from '@/events/relays/telemetry.event-relay';
 import { initExpressionEvaluator } from '@/expression-evaluator';
@@ -37,6 +33,8 @@ import { WorkflowHistoryManager } from '@/workflows/workflow-history/workflow-hi
 
 export abstract class BaseCommand extends Command {
 	protected logger = Container.get(Logger);
+
+	protected errorReporter: ErrorReporter;
 
 	protected externalHooks?: ExternalHooks;
 
@@ -62,7 +60,11 @@ export abstract class BaseCommand extends Command {
 	protected needsCommunityPackages = false;
 
 	async init(): Promise<void> {
-		await initErrorHandling();
+		this.errorReporter = Container.get(ErrorReporter);
+		await this.errorReporter.init(
+			this.instanceSettings.instanceType,
+			this.globalConfig.sentry.backendDsn,
+		);
 		initExpressionEvaluator();
 
 		process.once('SIGTERM', this.onTerminationSignal('SIGTERM'));
@@ -88,33 +90,14 @@ export abstract class BaseCommand extends Command {
 				await this.exitWithCrash('There was an error running database migrations', error),
 		);
 
-		const { type: dbType } = this.globalConfig.database;
-
-		if (['mysqldb', 'mariadb'].includes(dbType)) {
-			this.logger.warn(
-				'Support for MySQL/MariaDB has been deprecated and will be removed with an upcoming version of n8n. Please migrate to PostgreSQL.',
-			);
-		}
-
-		if (process.env.N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN) {
-			this.logger.warn(
-				'The flag to skip webhook deregistration N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN has been removed. n8n no longer deregisters webhooks at startup and shutdown, in main and queue mode.',
-			);
-		}
-
-		if (config.getEnv('executions.mode') === 'queue' && dbType === 'sqlite') {
-			this.logger.warn(
-				'Queue mode is not officially supported with sqlite. Please switch to PostgreSQL.',
-			);
-		}
+		Container.get(DeprecationService).warn();
 
 		if (
-			process.env.N8N_BINARY_DATA_TTL ??
-			process.env.N8N_PERSISTED_BINARY_DATA_TTL ??
-			process.env.EXECUTIONS_DATA_PRUNE_TIMEOUT
+			config.getEnv('executions.mode') === 'queue' &&
+			this.globalConfig.database.type === 'sqlite'
 		) {
 			this.logger.warn(
-				'The env vars N8N_BINARY_DATA_TTL and N8N_PERSISTED_BINARY_DATA_TTL and EXECUTIONS_DATA_PRUNE_TIMEOUT no longer have any effect and can be safely removed. Instead of relying on a TTL system for binary data, n8n currently cleans up binary data together with executions during pruning.',
+				'Scaling mode is not officially supported with sqlite. Please use PostgreSQL instead.',
 			);
 		}
 
@@ -148,7 +131,7 @@ export abstract class BaseCommand extends Command {
 	}
 
 	protected async exitWithCrash(message: string, error: unknown) {
-		ErrorReporter.error(new Error(message, { cause: error }), { level: 'fatal' });
+		this.errorReporter.error(new Error(message, { cause: error }), { level: 'fatal' });
 		await sleep(2000);
 		process.exit(1);
 	}
@@ -274,7 +257,7 @@ export abstract class BaseCommand extends Command {
 		this.license = Container.get(License);
 		await this.license.init();
 
-		const activationKey = config.getEnv('license.activationKey');
+		const { activationKey } = this.globalConfig.license;
 
 		if (activationKey) {
 			const hasCert = (await this.license.loadCertStr()).length > 0;

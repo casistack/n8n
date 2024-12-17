@@ -227,9 +227,6 @@ export class NDV extends BasePage {
 			this.getters.inputSelect().find('.el-select').click();
 			this.getters.inputOption().contains(nodeName).click();
 		},
-		expandSchemaViewNode: (nodeName: string) => {
-			this.getters.schemaViewNodeName().contains(nodeName).click();
-		},
 		addDefaultPinnedData: () => {
 			this.actions.editPinnedData();
 			this.actions.savePinnedData();
@@ -322,6 +319,12 @@ export class NDV extends BasePage {
 		},
 		addItemToFixedCollection: (paramName: string) => {
 			this.getters.fixedCollectionParameter(paramName).getByTestId('fixed-collection-add').click();
+		},
+		dragMainPanelToLeft: () => {
+			cy.drag('[data-test-id=panel-drag-button]', [-1000, 0], { moveTwice: true });
+		},
+		dragMainPanelToRight: () => {
+			cy.drag('[data-test-id=panel-drag-button]', [1000, 0], { moveTwice: true });
 		},
 	};
 }

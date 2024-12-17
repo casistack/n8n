@@ -1,29 +1,54 @@
+import { mock } from 'jest-mock-extended';
 import { DateTime } from 'luxon';
-import type { CodeExecutionMode, IDataObject } from 'n8n-workflow';
+import { setGlobalState, type CodeExecutionMode, type IDataObject } from 'n8n-workflow';
 import fs from 'node:fs';
 import { builtinModules } from 'node:module';
 
+import type { BaseRunnerConfig } from '@/config/base-runner-config';
+import type { JsRunnerConfig } from '@/config/js-runner-config';
+import { MainConfig } from '@/config/main-config';
+import { ExecutionError } from '@/js-task-runner/errors/execution-error';
 import { ValidationError } from '@/js-task-runner/errors/validation-error';
-import type { JsTaskRunnerOpts } from '@/js-task-runner/js-task-runner';
-import {
-	JsTaskRunner,
-	type AllCodeTaskData,
-	type JSExecSettings,
-} from '@/js-task-runner/js-task-runner';
+import type { JSExecSettings } from '@/js-task-runner/js-task-runner';
+import { JsTaskRunner } from '@/js-task-runner/js-task-runner';
+import type { DataRequestResponse, InputDataChunkDefinition } from '@/runner-types';
 import type { Task } from '@/task-runner';
 
-import { newAllCodeTaskData, newTaskWithSettings, withPairedItem, wrapIntoJson } from './test-data';
-import { ExecutionError } from '../errors/execution-error';
+import {
+	newDataRequestResponse,
+	newTaskWithSettings,
+	withPairedItem,
+	wrapIntoJson,
+} from './test-data';
 
 jest.mock('ws');
 
+const defaultConfig = new MainConfig();
+
 describe('JsTaskRunner', () => {
-	const createRunnerWithOpts = (opts: Partial<JsTaskRunnerOpts> = {}) =>
+	const createRunnerWithOpts = (
+		jsRunnerOpts: Partial<JsRunnerConfig> = {},
+		baseRunnerOpts: Partial<BaseRunnerConfig> = {},
+	) =>
 		new JsTaskRunner({
-			wsUrl: 'ws://localhost',
-			grantToken: 'grantToken',
-			maxConcurrency: 1,
-			...opts,
+			baseRunnerConfig: {
+				...defaultConfig.baseRunnerConfig,
+				grantToken: 'grantToken',
+				maxConcurrency: 1,
+				taskBrokerUri: 'http://localhost',
+				taskTimeout: 60,
+				...baseRunnerOpts,
+			},
+			jsRunnerConfig: {
+				...defaultConfig.jsRunnerConfig,
+				...jsRunnerOpts,
+			},
+			sentryConfig: {
+				sentryDsn: '',
+				deploymentName: '',
+				environment: '',
+				n8nVersion: '',
+			},
 		});
 
 	const defaultTaskRunner = createRunnerWithOpts();
@@ -34,11 +59,11 @@ describe('JsTaskRunner', () => {
 		runner = defaultTaskRunner,
 	}: {
 		task: Task<JSExecSettings>;
-		taskData: AllCodeTaskData;
+		taskData: DataRequestResponse;
 		runner?: JsTaskRunner;
 	}) => {
 		jest.spyOn(runner, 'requestData').mockResolvedValue(taskData);
-		return await runner.executeTask(task);
+		return await runner.executeTask(task, mock<AbortSignal>());
 	};
 
 	afterEach(() => {
@@ -62,7 +87,7 @@ describe('JsTaskRunner', () => {
 				nodeMode: 'runOnceForAllItems',
 				...settings,
 			}),
-			taskData: newAllCodeTaskData(inputItems.map(wrapIntoJson)),
+			taskData: newDataRequestResponse(inputItems.map(wrapIntoJson)),
 			runner,
 		});
 	};
@@ -72,20 +97,22 @@ describe('JsTaskRunner', () => {
 		inputItems,
 		settings,
 		runner,
+		chunk,
 	}: {
 		code: string;
 		inputItems: IDataObject[];
 		settings?: Partial<JSExecSettings>;
-
 		runner?: JsTaskRunner;
+		chunk?: InputDataChunkDefinition;
 	}) => {
 		return await execTaskWithParams({
 			task: newTaskWithSettings({
 				code,
 				nodeMode: 'runOnceForEachItem',
+				chunk,
 				...settings,
 			}),
-			taskData: newAllCodeTaskData(inputItems.map(wrapIntoJson)),
+			taskData: newDataRequestResponse(inputItems.map(wrapIntoJson)),
 			runner,
 		});
 	};
@@ -102,7 +129,7 @@ describe('JsTaskRunner', () => {
 
 				await execTaskWithParams({
 					task,
-					taskData: newAllCodeTaskData([wrapIntoJson({})]),
+					taskData: newDataRequestResponse([wrapIntoJson({})]),
 				});
 
 				expect(defaultTaskRunner.makeRpcCall).toHaveBeenCalledWith(task.taskId, 'logNodeOutput', [
@@ -110,6 +137,36 @@ describe('JsTaskRunner', () => {
 				]);
 			},
 		);
+
+		it('should not throw when using unsupported console methods', async () => {
+			const task = newTaskWithSettings({
+				code: `
+					console.warn('test');
+					console.error('test');
+					console.info('test');
+					console.debug('test');
+					console.trace('test');
+					console.dir({});
+					console.time('test');
+					console.timeEnd('test');
+					console.timeLog('test');
+					console.assert(true);
+					console.clear();
+					console.group('test');
+					console.groupEnd();
+					console.table([]);
+					return {json: {}}
+				`,
+				nodeMode: 'runOnceForAllItems',
+			});
+
+			await expect(
+				execTaskWithParams({
+					task,
+					taskData: newDataRequestResponse([wrapIntoJson({})]),
+				}),
+			).resolves.toBeDefined();
+		});
 	});
 
 	describe('built-in methods and variables available in the context', () => {
@@ -188,6 +245,7 @@ describe('JsTaskRunner', () => {
 				['$runIndex', 0],
 				['{ wf: $workflow }', { wf: { active: true, id: '1', name: 'Test Workflow' } }],
 				['$vars', { var: 'value' }],
+				['$getWorkflowStaticData("global")', {}],
 			],
 			'Node.js internal functions': [
 				['typeof Function', 'function'],
@@ -237,7 +295,7 @@ describe('JsTaskRunner', () => {
 						code: 'return { val: $env.VAR1 }',
 						nodeMode: 'runOnceForAllItems',
 					}),
-					taskData: newAllCodeTaskData(inputItems.map(wrapIntoJson), {
+					taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
 						envProviderState: {
 							isEnvAccessBlocked: false,
 							isProcessAvailable: true,
@@ -256,7 +314,7 @@ describe('JsTaskRunner', () => {
 							code: 'return { val: $env.VAR1 }',
 							nodeMode: 'runOnceForAllItems',
 						}),
-						taskData: newAllCodeTaskData(inputItems.map(wrapIntoJson), {
+						taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
 							envProviderState: {
 								isEnvAccessBlocked: true,
 								isProcessAvailable: true,
@@ -273,7 +331,7 @@ describe('JsTaskRunner', () => {
 						code: 'return Object.values($env).concat(Object.keys($env))',
 						nodeMode: 'runOnceForAllItems',
 					}),
-					taskData: newAllCodeTaskData(inputItems.map(wrapIntoJson), {
+					taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
 						envProviderState: {
 							isEnvAccessBlocked: false,
 							isProcessAvailable: true,
@@ -286,13 +344,13 @@ describe('JsTaskRunner', () => {
 			});
 
 			it("should not expose task runner's env variables even if no env state is received", async () => {
-				process.env.N8N_RUNNERS_N8N_URI = 'http://127.0.0.1:5679';
+				process.env.N8N_RUNNERS_TASK_BROKER_URI = 'http://127.0.0.1:5679';
 				const outcome = await execTaskWithParams({
 					task: newTaskWithSettings({
-						code: 'return { val: $env.N8N_RUNNERS_N8N_URI }',
+						code: 'return { val: $env.N8N_RUNNERS_TASK_BROKER_URI }',
 						nodeMode: 'runOnceForAllItems',
 					}),
-					taskData: newAllCodeTaskData(inputItems.map(wrapIntoJson), {
+					taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
 						envProviderState: undefined,
 					}),
 				});
@@ -301,13 +359,221 @@ describe('JsTaskRunner', () => {
 			});
 		});
 
+		describe('timezone', () => {
+			it('should use the specified timezone in the workflow', async () => {
+				const taskData = newDataRequestResponse(inputItems.map(wrapIntoJson), {});
+				taskData.workflow.settings = {
+					timezone: 'Europe/Helsinki',
+				};
+
+				const outcome = await execTaskWithParams({
+					task: newTaskWithSettings({
+						code: 'return { val: $now.toSeconds() }',
+						nodeMode: 'runOnceForAllItems',
+					}),
+					taskData,
+				});
+
+				const helsinkiTimeNow = DateTime.now().setZone('Europe/Helsinki').toSeconds();
+				expect(outcome.result[0].json.val).toBeCloseTo(helsinkiTimeNow, 1);
+			});
+
+			it('should use the default timezone', async () => {
+				setGlobalState({
+					defaultTimezone: 'Europe/Helsinki',
+				});
+
+				const outcome = await execTaskWithParams({
+					task: newTaskWithSettings({
+						code: 'return { val: $now.toSeconds() }',
+						nodeMode: 'runOnceForAllItems',
+					}),
+					taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {}),
+				});
+
+				const helsinkiTimeNow = DateTime.now().setZone('Europe/Helsinki').toSeconds();
+				expect(outcome.result[0].json.val).toBeCloseTo(helsinkiTimeNow, 1);
+			});
+		});
+
+		describe("$getWorkflowStaticData('global')", () => {
+			it('should have the global workflow static data available in runOnceForAllItems', async () => {
+				const outcome = await execTaskWithParams({
+					task: newTaskWithSettings({
+						code: 'return { val: $getWorkflowStaticData("global") }',
+						nodeMode: 'runOnceForAllItems',
+					}),
+					taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
+						staticData: {
+							global: { key: 'value' },
+						},
+					}),
+				});
+
+				expect(outcome.result).toEqual([wrapIntoJson({ val: { key: 'value' } })]);
+			});
+
+			it('should have the global workflow static data available in runOnceForEachItem', async () => {
+				const outcome = await execTaskWithParams({
+					task: newTaskWithSettings({
+						code: 'return { val: $getWorkflowStaticData("global") }',
+						nodeMode: 'runOnceForEachItem',
+					}),
+					taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
+						staticData: {
+							global: { key: 'value' },
+						},
+					}),
+				});
+
+				expect(outcome.result).toEqual([
+					withPairedItem(0, wrapIntoJson({ val: { key: 'value' } })),
+				]);
+			});
+
+			test.each<[CodeExecutionMode]>([['runOnceForAllItems'], ['runOnceForEachItem']])(
+				"does not return static data if it hasn't been modified in %s",
+				async (mode) => {
+					const outcome = await execTaskWithParams({
+						task: newTaskWithSettings({
+							code: `
+								const staticData = $getWorkflowStaticData("global");
+								return { val: staticData };
+							`,
+							nodeMode: mode,
+						}),
+						taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
+							staticData: {
+								global: { key: 'value' },
+							},
+						}),
+					});
+
+					expect(outcome.staticData).toBeUndefined();
+				},
+			);
+
+			test.each<[CodeExecutionMode]>([['runOnceForAllItems'], ['runOnceForEachItem']])(
+				'returns the updated static data in %s',
+				async (mode) => {
+					const outcome = await execTaskWithParams({
+						task: newTaskWithSettings({
+							code: `
+								const staticData = $getWorkflowStaticData("global");
+								staticData.newKey = 'newValue';
+								return { val: staticData };
+							`,
+							nodeMode: mode,
+						}),
+						taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
+							staticData: {
+								global: { key: 'value' },
+								'node:OtherNode': { some: 'data' },
+							},
+						}),
+					});
+
+					expect(outcome.staticData).toEqual({
+						global: { key: 'value', newKey: 'newValue' },
+						'node:OtherNode': { some: 'data' },
+					});
+				},
+			);
+		});
+
+		describe("$getWorkflowStaticData('node')", () => {
+			const createTaskDataWithNodeStaticData = (nodeStaticData: IDataObject) => {
+				const taskData = newDataRequestResponse(inputItems.map(wrapIntoJson));
+				const taskDataKey = `node:${taskData.node.name}`;
+				taskData.workflow.staticData = {
+					global: { 'global-key': 'global-value' },
+					'node:OtherNode': { 'other-key': 'other-value' },
+					[taskDataKey]: nodeStaticData,
+				};
+
+				return taskData;
+			};
+
+			it('should have the node workflow static data available in runOnceForAllItems', async () => {
+				const outcome = await execTaskWithParams({
+					task: newTaskWithSettings({
+						code: 'return { val: $getWorkflowStaticData("node") }',
+						nodeMode: 'runOnceForAllItems',
+					}),
+					taskData: createTaskDataWithNodeStaticData({ key: 'value' }),
+				});
+
+				expect(outcome.result).toEqual([wrapIntoJson({ val: { key: 'value' } })]);
+			});
+
+			it('should have the node workflow static data available in runOnceForEachItem', async () => {
+				const outcome = await execTaskWithParams({
+					task: newTaskWithSettings({
+						code: 'return { val: $getWorkflowStaticData("node") }',
+						nodeMode: 'runOnceForEachItem',
+					}),
+					taskData: createTaskDataWithNodeStaticData({ key: 'value' }),
+				});
+
+				expect(outcome.result).toEqual([
+					withPairedItem(0, wrapIntoJson({ val: { key: 'value' } })),
+				]);
+			});
+
+			test.each<[CodeExecutionMode]>([['runOnceForAllItems'], ['runOnceForEachItem']])(
+				"does not return static data if it hasn't been modified in %s",
+				async (mode) => {
+					const outcome = await execTaskWithParams({
+						task: newTaskWithSettings({
+							code: `
+								const staticData = $getWorkflowStaticData("node");
+								return { val: staticData };
+							`,
+							nodeMode: mode,
+						}),
+						taskData: createTaskDataWithNodeStaticData({ key: 'value' }),
+					});
+
+					expect(outcome.staticData).toBeUndefined();
+				},
+			);
+
+			test.each<[CodeExecutionMode]>([['runOnceForAllItems'], ['runOnceForEachItem']])(
+				'returns the updated static data in %s',
+				async (mode) => {
+					const outcome = await execTaskWithParams({
+						task: newTaskWithSettings({
+							code: `
+								const staticData = $getWorkflowStaticData("node");
+								staticData.newKey = 'newValue';
+								return { val: staticData };
+							`,
+							nodeMode: mode,
+						}),
+						taskData: createTaskDataWithNodeStaticData({ key: 'value' }),
+					});
+
+					expect(outcome.staticData).toEqual({
+						global: { 'global-key': 'global-value' },
+						'node:JsCode': {
+							key: 'value',
+							newKey: 'newValue',
+						},
+						'node:OtherNode': {
+							'other-key': 'other-value',
+						},
+					});
+				},
+			);
+		});
+
 		it('should allow access to Node.js Buffers', async () => {
 			const outcomeAll = await execTaskWithParams({
 				task: newTaskWithSettings({
 					code: 'return { val: Buffer.from("test-buffer").toString() }',
 					nodeMode: 'runOnceForAllItems',
 				}),
-				taskData: newAllCodeTaskData(inputItems.map(wrapIntoJson), {
+				taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
 					envProviderState: undefined,
 				}),
 			});
@@ -319,7 +585,7 @@ describe('JsTaskRunner', () => {
 					code: 'return { val: Buffer.from("test-buffer").toString() }',
 					nodeMode: 'runOnceForEachItem',
 				}),
-				taskData: newAllCodeTaskData(inputItems.map(wrapIntoJson), {
+				taskData: newDataRequestResponse(inputItems.map(wrapIntoJson), {
 					envProviderState: undefined,
 				}),
 			});
@@ -484,6 +750,28 @@ describe('JsTaskRunner', () => {
 					).rejects.toThrow(ValidationError);
 				},
 			);
+		});
+
+		describe('chunked execution', () => {
+			it('should use correct index for each item', async () => {
+				const outcome = await executeForEachItem({
+					code: 'return { ...$json, idx: $itemIndex }',
+					inputItems: [{ a: 1 }, { b: 2 }, { c: 3 }],
+					chunk: {
+						startIndex: 100,
+						count: 3,
+					},
+				});
+
+				expect(outcome).toEqual({
+					result: [
+						withPairedItem(100, wrapIntoJson({ a: 1, idx: 100 })),
+						withPairedItem(101, wrapIntoJson({ b: 2, idx: 101 })),
+						withPairedItem(102, wrapIntoJson({ c: 3, idx: 102 })),
+					],
+					customData: undefined,
+				});
+			});
 		});
 
 		it('should return static items', async () => {
@@ -765,7 +1053,7 @@ describe('JsTaskRunner', () => {
 							code: 'unknown',
 							nodeMode,
 						}),
-						taskData: newAllCodeTaskData([wrapIntoJson({ a: 1 })]),
+						taskData: newDataRequestResponse([wrapIntoJson({ a: 1 })]),
 					}),
 				).rejects.toThrow(ExecutionError);
 			},
@@ -778,7 +1066,6 @@ describe('JsTaskRunner', () => {
 				code: 'unknown; return []',
 				nodeMode: 'runOnceForAllItems',
 				continueOnFail: false,
-				mode: 'manual',
 				workflowMode: 'manual',
 			});
 			runner.runningTasks.set(taskId, task);
@@ -787,7 +1074,7 @@ describe('JsTaskRunner', () => {
 			jest.spyOn(runner, 'sendOffers').mockImplementation(() => {});
 			jest
 				.spyOn(runner, 'requestData')
-				.mockResolvedValue(newAllCodeTaskData([wrapIntoJson({ a: 1 })]));
+				.mockResolvedValue(newDataRequestResponse([wrapIntoJson({ a: 1 })]));
 
 			await runner.receivedSettings(taskId, task.settings);
 
@@ -805,6 +1092,102 @@ describe('JsTaskRunner', () => {
 					lineNumber: 1,
 				},
 			});
+		});
+	});
+
+	describe('idle timeout', () => {
+		beforeEach(() => {
+			jest.useFakeTimers();
+		});
+
+		afterEach(() => {
+			jest.useRealTimers();
+		});
+
+		it('should set idle timer when instantiated', () => {
+			const idleTimeout = 5;
+			const runner = createRunnerWithOpts({}, { idleTimeout });
+			const emitSpy = jest.spyOn(runner, 'emit');
+
+			jest.advanceTimersByTime(idleTimeout * 1000 - 100);
+			expect(emitSpy).not.toHaveBeenCalledWith('runner:reached-idle-timeout');
+
+			jest.advanceTimersByTime(idleTimeout * 1000);
+			expect(emitSpy).toHaveBeenCalledWith('runner:reached-idle-timeout');
+		});
+
+		it('should reset idle timer when accepting a task', () => {
+			const idleTimeout = 5;
+			const runner = createRunnerWithOpts({}, { idleTimeout });
+			const taskId = '123';
+			const offerId = 'offer123';
+			const emitSpy = jest.spyOn(runner, 'emit');
+
+			jest.advanceTimersByTime(idleTimeout * 1000 - 100);
+			expect(emitSpy).not.toHaveBeenCalledWith('runner:reached-idle-timeout');
+
+			runner.openOffers.set(offerId, {
+				offerId,
+				validUntil: process.hrtime.bigint() + BigInt(idleTimeout * 1000 * 1_000_000),
+			});
+			runner.offerAccepted(offerId, taskId);
+
+			jest.advanceTimersByTime(200);
+			expect(emitSpy).not.toHaveBeenCalledWith('runner:reached-idle-timeout'); // because timer was reset
+
+			runner.runningTasks.clear();
+
+			jest.advanceTimersByTime(idleTimeout * 1000);
+			expect(emitSpy).toHaveBeenCalledWith('runner:reached-idle-timeout');
+		});
+
+		it('should reset idle timer when finishing a task', async () => {
+			const idleTimeout = 5;
+			const runner = createRunnerWithOpts({}, { idleTimeout });
+			const taskId = '123';
+			const emitSpy = jest.spyOn(runner, 'emit');
+			jest.spyOn(runner, 'executeTask').mockResolvedValue({ result: [] });
+
+			runner.runningTasks.set(taskId, {
+				taskId,
+				active: true,
+				cancelled: false,
+			});
+
+			jest.advanceTimersByTime(idleTimeout * 1000 - 100);
+			expect(emitSpy).not.toHaveBeenCalledWith('runner:reached-idle-timeout');
+
+			await runner.receivedSettings(taskId, {});
+
+			jest.advanceTimersByTime(200);
+			expect(emitSpy).not.toHaveBeenCalledWith('runner:reached-idle-timeout'); // because timer was reset
+
+			jest.advanceTimersByTime(idleTimeout * 1000);
+			expect(emitSpy).toHaveBeenCalledWith('runner:reached-idle-timeout');
+		});
+
+		it('should never reach idle timeout if idle timeout is set to 0', () => {
+			const runner = createRunnerWithOpts({}, { idleTimeout: 0 });
+			const emitSpy = jest.spyOn(runner, 'emit');
+
+			jest.advanceTimersByTime(999999);
+			expect(emitSpy).not.toHaveBeenCalledWith('runner:reached-idle-timeout');
+		});
+
+		it('should not reach idle timeout if there are running tasks', () => {
+			const idleTimeout = 5;
+			const runner = createRunnerWithOpts({}, { idleTimeout });
+			const taskId = '123';
+			const emitSpy = jest.spyOn(runner, 'emit');
+
+			runner.runningTasks.set(taskId, {
+				taskId,
+				active: true,
+				cancelled: false,
+			});
+
+			jest.advanceTimersByTime(idleTimeout * 1000);
+			expect(emitSpy).not.toHaveBeenCalledWith('runner:reached-idle-timeout');
 		});
 	});
 });
