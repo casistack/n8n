@@ -1,0 +1,128 @@
+# Stage 1: Base dependencies that rarely change
+FROM --platform=linux/amd64 debian:bullseye-slim AS base-deps
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install core system dependencies that rarely change
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    tini \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/*
+
+# Stage 2: Browser dependencies
+FROM base-deps AS browser-deps
+
+# Install Chrome/Puppeteer dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    libgtk2.0-0 \
+    libgtk-3-0 \
+    libgbm-dev \
+    libnotify-dev \
+    libgconf-2-4 \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libxtst6 \
+    xauth \
+    xvfb \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/*
+
+# Stage 3: Build dependencies
+FROM browser-deps AS builder
+
+ARG NODE_VERSION=20.15.0
+ARG N8N_VERSION
+
+# Install build tools and pnpm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3 \
+    git \
+    jq \
+    && npm install -g pnpm \
+    && git config --global user.email "docker@build" \
+    && git config --global user.name "Docker Build" \
+    && git config --global init.defaultBranch main \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/*
+
+WORKDIR /src
+COPY . .
+RUN git init
+
+# Build application with improved caching
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
+    pnpm install --frozen-lockfile && \
+    pnpm build
+
+# Prepare production assets
+RUN jq 'del(.pnpm.patchedDependencies)' package.json > package.json.tmp && \
+    mv package.json.tmp package.json && \
+    node .github/scripts/trim-fe-packageJson.js && \
+    find . -type f \( -name "*.ts" -o -name "*.js.map" -o -name "*.vue" -o -name "tsconfig.json" -o -name "*.tsbuildinfo" \) -delete && \
+    mkdir /compiled && \
+    NODE_ENV=production pnpm --filter=n8n --prod --no-optional deploy /compiled
+
+# Stage 4: Final production image
+FROM browser-deps
+
+# Set all ARGs and ENVs
+ARG NODE_VERSION
+ARG N8N_VERSION
+ENV NODE_ENV=production \
+    N8N_VERSION=${N8N_VERSION} \
+    N8N_ENVIRONMENT=production \
+    NODE_VERSION=${NODE_VERSION} \
+    N8N_PATH=/ \
+    GENERIC_TIMEZONE=Europe/London \
+    TZ=Europe/London \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    CHROME_BIN=/usr/bin/chromium \
+    CHROME_PATH=/usr/lib/chromium/ \
+    SHELL=/bin/bash \
+    NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
+
+# Install FFmpeg and GraphicsMagick (kept in separate layer for better caching)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    graphicsmagick \
+    iputils-ping \
+    nano \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/*
+
+# Create node user and set up directories
+RUN useradd -ms /bin/bash node && \
+    mkdir -p /home/node/.n8n && \
+    chown -R node:node /home/node
+
+WORKDIR /home/node
+
+# Copy n8n and entrypoint
+COPY --from=builder /compiled /usr/local/lib/node_modules/n8n
+COPY docker-entrypoint-debian2.sh /
+RUN chmod +x /docker-entrypoint-debian2.sh && \
+    cd /usr/local/lib/node_modules/n8n && \
+    npm rebuild sqlite3 && \
+    cd - && \
+    ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
+    chown -R node:node /home/node/.n8n
+
+USER node
+
+# Verify n8n installation
+RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');"
+
+EXPOSE 5678
+
+ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
+CMD ["n8n", "start"]
