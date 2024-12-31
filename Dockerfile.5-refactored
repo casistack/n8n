@@ -1,0 +1,117 @@
+# Build stage
+FROM --platform=linux/amd64 debian:bullseye-slim AS builder
+
+# Set ARGs at the top for better caching
+ARG NODE_VERSION=20.15.0
+ARG N8N_VERSION
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Combine all builder stage installations into one RUN command
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ffmpeg \
+    gnupg \
+    build-essential \
+    python3 \
+    git \
+    jq \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest pnpm \
+    && git config --global user.email "docker@build" \
+    && git config --global user.name "Docker Build" \
+    && git config --global init.defaultBranch main \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/*
+
+# Set up working directory and copy files
+WORKDIR /src
+COPY . .
+RUN git init
+
+# Build application with better caching
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
+    pnpm install --frozen-lockfile && \
+    pnpm build && \
+    jq 'del(.pnpm.patchedDependencies)' package.json > package.json.tmp && \
+    mv package.json.tmp package.json && \
+    node .github/scripts/trim-fe-packageJson.js
+
+# Clean up source files in one command
+RUN find . -type f \( -name "*.ts" -o -name "*.js.map" -o -name "*.vue" -o -name "tsconfig.json" -o -name "*.tsbuildinfo" \) -delete && \
+    mkdir /compiled && \
+    NODE_ENV=production pnpm --filter=n8n --prod --no-optional deploy /compiled
+
+# Production stage
+FROM debian:bullseye-slim
+
+ARG NODE_VERSION
+ARG N8N_VERSION
+ENV NODE_ENV=production \
+    N8N_VERSION=${N8N_VERSION} \
+    N8N_ENVIRONMENT=production \
+    NODE_VERSION=${NODE_VERSION} \
+    N8N_PATH=/ \
+    GENERIC_TIMEZONE=Europe/London \
+    TZ=Europe/London \
+    DEBIAN_FRONTEND=noninteractive \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    CHROME_BIN=/usr/bin/chromium \
+    CHROME_PATH=/usr/lib/chromium/ \
+    SHELL=/bin/bash \
+    NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
+
+# Install all production dependencies in one layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ffmpeg \
+    iputils-ping \
+    nano \
+    gnupg \
+    tini \
+    chromium \
+    libgtk2.0-0 \
+    libgtk-3-0 \
+    libgbm-dev \
+    libnotify-dev \
+    libgconf-2-4 \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libxtst6 \
+    xauth \
+    xvfb \
+    graphicsmagick \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest \
+    && useradd -ms /bin/bash node \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/*
+
+WORKDIR /home/node
+
+# Copy and set up n8n in one layer
+COPY --from=builder /compiled /usr/local/lib/node_modules/n8n
+COPY docker-entrypoint-debian2.sh /
+RUN chmod +x /docker-entrypoint-debian2.sh \
+    && cd /usr/local/lib/node_modules/n8n \
+    && npm rebuild sqlite3 \
+    && cd - \
+    && ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n \
+    && mkdir -p /home/node/.n8n \
+    && chown -R node:node /home/node
+
+USER node
+
+# Verify n8n installation
+RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');"
+
+EXPOSE 5678
+
+ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
+CMD ["n8n", "start"]
