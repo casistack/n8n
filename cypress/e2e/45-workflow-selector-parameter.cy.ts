@@ -17,7 +17,7 @@ describe('Workflow Selector Parameter', () => {
 		workflowPage.actions.visit();
 		workflowPage.actions.addInitialNodeToCanvas(EXECUTE_WORKFLOW_NODE_NAME, {
 			keepNdvOpen: true,
-			action: 'Call Another Workflow',
+			action: 'Execute A Sub Workflow',
 		});
 	});
 	it('should render sub-workflows list', () => {
@@ -94,7 +94,7 @@ describe('Workflow Selector Parameter', () => {
 			.findChildByTestId('rlc-item')
 			.eq(0)
 			.find('span')
-			.should('have.text', 'Create a new sub-workflow');
+			.should('contain.text', 'Create a'); // Due to some inconsistency we're sometimes in a project and sometimes not, this covers both cases
 
 		getVisiblePopper().findChildByTestId('rlc-item').eq(0).click();
 

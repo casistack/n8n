@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-shadow */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+import { Container, Service } from '@n8n/di';
 import { ErrorReporter, InstanceSettings, Logger, WorkflowExecute } from 'n8n-core';
 import type {
 	ExecutionError,
@@ -15,12 +16,18 @@ import type {
 } from 'n8n-workflow';
 import { ExecutionCancelledError, Workflow } from 'n8n-workflow';
 import PCancelable from 'p-cancelable';
-import { Container, Service } from 'typedi';
 
 import { ActiveExecutions } from '@/active-executions';
 import config from '@/config';
 import { ExecutionRepository } from '@/databases/repositories/execution.repository';
+import { ExecutionNotFoundError } from '@/errors/execution-not-found-error';
+import {
+	getWorkflowHooksMain,
+	getWorkflowHooksWorkerExecuter,
+	getWorkflowHooksWorkerMain,
+} from '@/execution-lifecycle/execution-lifecycle-hooks';
 import { ExternalHooks } from '@/external-hooks';
+import { ManualExecutionService } from '@/manual-execution.service';
 import { NodeTypes } from '@/node-types';
 import type { ScalingService } from '@/scaling/scaling.service';
 import type { Job, JobData } from '@/scaling/scaling.types';
@@ -29,9 +36,7 @@ import * as WorkflowExecuteAdditionalData from '@/workflow-execute-additional-da
 import { generateFailedExecutionFromError } from '@/workflow-helpers';
 import { WorkflowStaticDataService } from '@/workflows/workflow-static-data.service';
 
-import { ExecutionNotFoundError } from './errors/execution-not-found-error';
-import { EventService } from './events/event.service';
-import { ManualExecutionService } from './manual-execution.service';
+import { MaxStalledCountError } from './errors/max-stalled-count.error';
 
 @Service()
 export class WorkflowRunner {
@@ -48,7 +53,6 @@ export class WorkflowRunner {
 		private readonly workflowStaticDataService: WorkflowStaticDataService,
 		private readonly nodeTypes: NodeTypes,
 		private readonly permissionChecker: PermissionChecker,
-		private readonly eventService: EventService,
 		private readonly instanceSettings: InstanceSettings,
 		private readonly manualExecutionService: ManualExecutionService,
 	) {}
@@ -82,7 +86,7 @@ export class WorkflowRunner {
 		// in queue mode, first do a sanity run for the edge case that the execution was not marked as stalled
 		// by Bull even though it executed successfully, see https://github.com/OptimalBits/bull/issues/1415
 
-		if (isQueueMode && executionMode !== 'manual') {
+		if (isQueueMode) {
 			const executionWithoutData = await this.executionRepository.findSingleExecution(executionId, {
 				includeData: false,
 			});
@@ -138,7 +142,7 @@ export class WorkflowRunner {
 		} catch (error) {
 			// Create a failed execution with the data for the node, save it and abort execution
 			const runData = generateFailedExecutionFromError(data.executionMode, error, error.node);
-			const workflowHooks = WorkflowExecuteAdditionalData.getWorkflowHooksMain(data, executionId);
+			const workflowHooks = getWorkflowHooksMain(data, executionId);
 			await workflowHooks.executeHookFunctions('workflowExecuteBefore', [
 				undefined,
 				data.executionData,
@@ -153,13 +157,16 @@ export class WorkflowRunner {
 			this.activeExecutions.attachResponsePromise(executionId, responsePromise);
 		}
 
-		if (this.executionsMode === 'queue' && data.executionMode !== 'manual') {
-			// Do not run "manual" executions in bull because sending events to the
-			// frontend would not be possible
+		// @TODO: Reduce to true branch once feature is stable
+		const shouldEnqueue =
+			process.env.OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS === 'true'
+				? this.executionsMode === 'queue'
+				: this.executionsMode === 'queue' && data.executionMode !== 'manual';
+
+		if (shouldEnqueue) {
 			await this.enqueueExecution(executionId, data, loadStaticData, realtime);
 		} else {
 			await this.runMainProcess(executionId, data, loadStaticData, restartExecutionId);
-			this.eventService.emit('workflow-pre-execute', { executionId, data });
 		}
 
 		// only run these when not in queue mode or when the execution is manual,
@@ -172,12 +179,6 @@ export class WorkflowRunner {
 			const postExecutePromise = this.activeExecutions.getPostExecutePromise(executionId);
 			postExecutePromise
 				.then(async (executionData) => {
-					this.eventService.emit('workflow-post-execute', {
-						workflow: data.workflowData,
-						executionId,
-						userId: data.userId,
-						runData: executionData,
-					});
 					if (this.externalHooks.exists('workflow.postExecute')) {
 						try {
 							await this.externalHooks.run('workflow.postExecute', [
@@ -230,7 +231,7 @@ export class WorkflowRunner {
 		}
 
 		let pinData: IPinData | undefined;
-		if (data.executionMode === 'manual') {
+		if (['manual', 'evaluation'].includes(data.executionMode)) {
 			pinData = data.pinData ?? data.workflowData.pinData;
 		}
 
@@ -263,7 +264,7 @@ export class WorkflowRunner {
 		await this.executionRepository.setRunning(executionId); // write
 
 		try {
-			additionalData.hooks = WorkflowExecuteAdditionalData.getWorkflowHooksMain(data, executionId);
+			additionalData.hooks = getWorkflowHooksMain(data, executionId);
 
 			additionalData.hooks.hookFunctions.sendResponse = [
 				async (response: IExecuteResponsePromiseData): Promise<void> => {
@@ -349,6 +350,7 @@ export class WorkflowRunner {
 		const jobData: JobData = {
 			executionId,
 			loadStaticData: !!loadStaticData,
+			pushRef: data.pushRef,
 		};
 
 		if (!this.scalingService) {
@@ -363,12 +365,9 @@ export class WorkflowRunner {
 		try {
 			job = await this.scalingService.addJob(jobData, { priority: realtime ? 50 : 100 });
 
-			hooks = WorkflowExecuteAdditionalData.getWorkflowHooksWorkerMain(
-				data.executionMode,
-				executionId,
-				data.workflowData,
-				{ retryOf: data.retryOf ? data.retryOf.toString() : undefined },
-			);
+			hooks = getWorkflowHooksWorkerMain(data.executionMode, executionId, data.workflowData, {
+				retryOf: data.retryOf ? data.retryOf.toString() : undefined,
+			});
 
 			// Normally also workflow should be supplied here but as it only used for sending
 			// data to editor-UI is not needed.
@@ -376,7 +375,7 @@ export class WorkflowRunner {
 		} catch (error) {
 			// We use "getWorkflowHooksWorkerExecuter" as "getWorkflowHooksWorkerMain" does not contain the
 			// "workflowExecuteAfter" which we require.
-			const hooks = WorkflowExecuteAdditionalData.getWorkflowHooksWorkerExecuter(
+			const hooks = getWorkflowHooksWorkerExecuter(
 				data.executionMode,
 				executionId,
 				data.workflowData,
@@ -394,7 +393,7 @@ export class WorkflowRunner {
 
 					// We use "getWorkflowHooksWorkerExecuter" as "getWorkflowHooksWorkerMain" does not contain the
 					// "workflowExecuteAfter" which we require.
-					const hooksWorker = WorkflowExecuteAdditionalData.getWorkflowHooksWorkerExecuter(
+					const hooksWorker = getWorkflowHooksWorkerExecuter(
 						data.executionMode,
 						executionId,
 						data.workflowData,
@@ -410,14 +409,22 @@ export class WorkflowRunner {
 				try {
 					await job.finished();
 				} catch (error) {
+					if (
+						error instanceof Error &&
+						error.message.includes('job stalled more than maxStalledCount')
+					) {
+						error = new MaxStalledCountError(error);
+					}
+
 					// We use "getWorkflowHooksWorkerExecuter" as "getWorkflowHooksWorkerMain" does not contain the
 					// "workflowExecuteAfter" which we require.
-					const hooks = WorkflowExecuteAdditionalData.getWorkflowHooksWorkerExecuter(
+					const hooks = getWorkflowHooksWorkerExecuter(
 						data.executionMode,
 						executionId,
 						data.workflowData,
 						{ retryOf: data.retryOf ? data.retryOf.toString() : undefined },
 					);
+
 					await this.processError(error, new Date(), data.executionMode, executionId, hooks);
 
 					reject(error);
