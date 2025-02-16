@@ -27,7 +27,7 @@ RUN mkdir /compiled
 RUN NODE_ENV=production DOCKER_BUILD=true pnpm --filter=n8n --prod --no-optional --legacy deploy /compiled
 
 # Use the official n8n runtime base image
-RUN echo "N8N VERSION:"
+RUN echo "N8N VERSION....."
 RUN echo $N8N_VERSION
 FROM n8nio/base:latest
 
