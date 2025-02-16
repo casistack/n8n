@@ -29,7 +29,7 @@ RUN NODE_ENV=production DOCKER_BUILD=true pnpm --filter=n8n --prod --no-optional
 # Use the official n8n runtime base image
 RUN echo "N8N VERSION:"
 RUN echo $N8N_VERSION
-FROM n8nio/base:${N8N_VERSION}
+FROM n8nio/base:latest
 
 # Set runtime environment variables
 ENV NODE_ENV=production
