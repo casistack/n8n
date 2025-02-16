@@ -112,12 +112,15 @@ COPY --from=builder /compiled /usr/local/lib/node_modules/n8n
 # Setup the Task Runner Launcher
 ARG TARGETPLATFORM
 ARG LAUNCHER_VERSION=1.1.0
+
+# Install wget and other required packages
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+
 COPY docker/images/n8n/n8n-task-runners.json /etc/n8n-task-runners.json
 
 # Download, verify, then extract the launcher binary
-RUN \
-    if [[ "$TARGETPLATFORM" = "linux/amd64" ]]; then export ARCH_NAME="amd64"; \
-    elif [[ "$TARGETPLATFORM" = "linux/arm64" ]]; then export ARCH_NAME="arm64"; fi; \
+SHELL ["/bin/bash", "-c"]
+RUN export ARCH_NAME="amd64" && \
     mkdir /launcher-temp && \
     cd /launcher-temp && \
     wget https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz && \
