@@ -1,7 +1,7 @@
 # Use the official n8n base image
 ARG NODE_VERSION=20
-#FROM --platform=linux/amd64 debian:bullseye-slim AS builder
-FROM --platform=linux/amd64 node:${NODE_VERSION}-bullseye-slim AS builder
+FROM --platform=linux/amd64 debian:bullseye-slim AS builder
+#FROM --platform=linux/amd64 node:${NODE_VERSION}-bullseye-slim AS builder
 
 # Set build arguments
 ARG N8N_VERSION=${N8N_VERSION}
