@@ -44,7 +44,8 @@ const emit = defineEmits<{
 	'update:modelValue': [elements: CanvasNode[]];
 	'update:node:position': [id: string, position: XYPosition];
 	'update:nodes:position': [events: CanvasNodeMoveEvent[]];
-	'update:node:active': [id: string];
+	'update:node:activated': [id: string];
+	'update:node:deactivated': [id: string];
 	'update:node:enabled': [id: string];
 	'update:node:selected': [id?: string];
 	'update:node:name': [id: string];
@@ -155,21 +156,21 @@ const panningKeyCode = ref<string[] | true>(isMobileDevice ? true : [' ', contro
 const panningMouseButton = ref<number[] | true>(isMobileDevice ? true : [1]);
 const selectionKeyCode = ref<string | true | null>(isMobileDevice ? 'Shift' : true);
 
-onKeyDown(
-	panningKeyCode.value,
-	() => {
-		selectionKeyCode.value = null;
-		panningMouseButton.value = [0, 1];
-	},
-	{
-		dedupe: true,
-	},
-);
+function switchToPanningMode() {
+	selectionKeyCode.value = null;
+	panningMouseButton.value = [0, 1];
+}
 
-onKeyUp(panningKeyCode.value, () => {
+function switchToSelectionMode() {
 	selectionKeyCode.value = true;
 	panningMouseButton.value = [1];
+}
+
+onKeyDown(panningKeyCode.value, switchToPanningMode, {
+	dedupe: true,
 });
+
+onKeyUp(panningKeyCode.value, switchToSelectionMode);
 
 /**
  * Rename node key bindings
@@ -246,7 +247,7 @@ function selectUpstreamNodes(id: string) {
 
 const keyMap = computed(() => ({
 	ctrl_c: emitWithSelectedNodes((ids) => emit('copy:nodes', ids)),
-	enter: emitWithLastSelectedNode((id) => onSetNodeActive(id)),
+	enter: emitWithLastSelectedNode((id) => onSetNodeActivated(id)),
 	ctrl_a: () => addSelectedNodes(graphNodes.value),
 	// Support both key and code for zooming in and out
 	'shift_+|+|=|shift_Equal|Equal': async () => await onZoomIn(),
@@ -337,9 +338,13 @@ function onSelectionDragStop(event: NodeDragEvent) {
 	onUpdateNodesPosition(event.nodes.map(({ id, position }) => ({ id, position })));
 }
 
-function onSetNodeActive(id: string) {
-	props.eventBus.emit('nodes:action', { ids: [id], action: 'update:node:active' });
-	emit('update:node:active', id);
+function onSetNodeActivated(id: string) {
+	props.eventBus.emit('nodes:action', { ids: [id], action: 'update:node:activated' });
+	emit('update:node:activated', id);
+}
+
+function onSetNodeDeactivated(id: string) {
+	emit('update:node:deactivated', id);
 }
 
 function clearSelectedNodes() {
@@ -607,7 +612,7 @@ function onContextMenuAction(action: ContextMenuAction, nodeIds: string[]) {
 		case 'toggle_activation':
 			return emit('update:nodes:enabled', nodeIds);
 		case 'open':
-			return onSetNodeActive(nodeIds[0]);
+			return onSetNodeActivated(nodeIds[0]);
 		case 'rename':
 			return emit('update:node:name', nodeIds[0]);
 		case 'change_color':
@@ -673,6 +678,14 @@ function onMinimapMouseLeave() {
 }
 
 /**
+ * Window Events
+ */
+
+function onWindowBlur() {
+	switchToSelectionMode();
+}
+
+/**
  * Lifecycle
  */
 
@@ -681,11 +694,15 @@ const initialized = ref(false);
 onMounted(() => {
 	props.eventBus.on('fitView', onFitView);
 	props.eventBus.on('nodes:select', onSelectNodes);
+
+	window.addEventListener('blur', onWindowBlur);
 });
 
 onUnmounted(() => {
 	props.eventBus.off('fitView', onFitView);
 	props.eventBus.off('nodes:select', onSelectNodes);
+
+	window.removeEventListener('blur', onWindowBlur);
 });
 
 onPaneReady(async () => {
@@ -760,7 +777,8 @@ provide(CanvasKey, {
 				@run="onRunNode"
 				@select="onSelectNode"
 				@toggle="onToggleNodeEnabled"
-				@activate="onSetNodeActive"
+				@activate="onSetNodeActivated"
+				@deactivate="onSetNodeDeactivated"
 				@open:contextmenu="onOpenNodeContextMenu"
 				@update="onUpdateNodeParameters"
 				@update:inputs="onUpdateNodeInputs"

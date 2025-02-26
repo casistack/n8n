@@ -173,6 +173,7 @@ describe('GlobalConfig', () => {
 				includeApiStatusCodeLabel: false,
 				includeQueueMetrics: false,
 				queueMetricsInterval: 20,
+				activeWorkflowCountInterval: 60,
 			},
 			additionalNonUIRoutes: '',
 			disableProductionWebhooksOnMainProcess: false,
@@ -305,8 +306,7 @@ describe('GlobalConfig', () => {
 			disabled: false,
 		},
 		partialExecutions: {
-			version: 1,
-			enforce: false,
+			version: 2,
 		},
 	};
 
