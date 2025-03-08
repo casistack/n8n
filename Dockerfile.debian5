@@ -33,23 +33,13 @@ RUN apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . .
 
-# Save original package files
-RUN cp package.json package.json.original && \
-    cp pnpm-lock.yaml pnpm-lock.yaml.original
+# Initialize git repo first (needed for lefthook)
+RUN git init
 
-# Fetch official package files
-RUN curl -s https://raw.githubusercontent.com/n8n-io/n8n/master/package.json -o package.json && \
-    curl -s https://raw.githubusercontent.com/n8n-io/n8n/master/pnpm-lock.yaml -o pnpm-lock.yaml
-
-# Install dependencies using the official files with patches available
+# Install dependencies allowing lockfile updates
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
-    DOCKER_BUILD=true pnpm install --frozen-lockfile
-
-# Restore original package files and init git
-RUN mv package.json.original package.json && \
-    mv pnpm-lock.yaml.original pnpm-lock.yaml && \
-    git init
+    DOCKER_BUILD=true pnpm install
 
 RUN pnpm build
 
