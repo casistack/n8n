@@ -18,13 +18,8 @@ RUN apt-get update && apt-get install -y \
     git \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
-    && npm install -g npm@latest \
+    && npm install -g npm@latest pnpm \
     && rm -rf /var/lib/apt/lists/*
-
-# Install project's specified pnpm version
-COPY package.json ./
-RUN PNPM_VERSION=$(node -p "require('./package.json').packageManager.split('@')[1]") && \
-    npm install -g pnpm@$PNPM_VERSION
 
 # Configure git
 RUN git config --global user.email "docker@build" && \
@@ -41,13 +36,10 @@ COPY . .
 # Initialize git repo first (needed for lefthook)
 RUN git init
 
-# Install dependencies with patch handling
+# Install dependencies
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
-    if ! DOCKER_BUILD=true pnpm install --frozen-lockfile; then \
-        echo "Frozen install failed, updating lockfile..." && \
-        DOCKER_BUILD=true pnpm install --no-frozen-lockfile --prefer-frozen-lockfile; \
-    fi
+    DOCKER_BUILD=true pnpm install --no-frozen-lockfile
 
 RUN pnpm build
 
