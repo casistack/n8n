@@ -33,11 +33,16 @@ RUN apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . /src
 
-# Initialize git repository (needed for lefthook)
-RUN git init
+# Fetch latest lockfile from n8n main repo
+RUN curl -s https://raw.githubusercontent.com/n8n-io/n8n/main/pnpm-lock.yaml -o pnpm-lock.yaml
 
-# Install dependencies with frozen lockfile
-RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata DOCKER_BUILD=true pnpm install --frozen-lockfile
+# Install dependencies using the official lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
+    DOCKER_BUILD=true pnpm install --frozen-lockfile
+
+# Initialize git repository (needed for lefthook) after install
+RUN git init
 
 RUN pnpm build
 
