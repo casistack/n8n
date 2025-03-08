@@ -33,8 +33,8 @@ RUN apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 
 # Fetch official package files first
-RUN curl -s https://raw.githubusercontent.com/n8n-io/n8n/main/package.json -o package.json && \
-    curl -s https://raw.githubusercontent.com/n8n-io/n8n/main/pnpm-lock.yaml -o pnpm-lock.yaml
+RUN curl -s https://raw.githubusercontent.com/n8n-io/n8n/master/package.json -o package.json && \
+    curl -s https://raw.githubusercontent.com/n8n-io/n8n/master/pnpm-lock.yaml -o pnpm-lock.yaml
 
 # Install dependencies using the official files
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
