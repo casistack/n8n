@@ -36,10 +36,12 @@ COPY . .
 # Initialize git repo first (needed for lefthook)
 RUN git init
 
-# Install dependencies allowing lockfile updates
+# Try frozen install first, if it fails do a fresh install
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
-    DOCKER_BUILD=true pnpm install
+    DOCKER_BUILD=true pnpm install --frozen-lockfile || \
+    DOCKER_BUILD=true pnpm install --no-frozen-lockfile && \
+    DOCKER_BUILD=true pnpm install --frozen-lockfile
 
 RUN pnpm build
 
