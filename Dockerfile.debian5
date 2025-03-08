@@ -38,8 +38,8 @@ RUN git init
 
 # Add n8n main repo as remote and fetch latest lockfile
 RUN git remote add upstream https://github.com/n8n-io/n8n.git && \
-    git fetch upstream main:main --depth 1 && \
-    git checkout main -- pnpm-lock.yaml
+    git fetch upstream master:master --depth 1 && \
+    git checkout master -- pnpm-lock.yaml
 
 # Install dependencies with frozen lockfile using the official lockfile
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
