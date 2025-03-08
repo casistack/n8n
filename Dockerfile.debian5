@@ -29,19 +29,22 @@ RUN git config --global user.email "docker@build" && \
 # Install jq for JSON processing
 RUN apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
 
-# Set up workspace and copy project files
+# Build the application from source
 WORKDIR /src
-COPY . .
+COPY . /src
 
-# Initialize git repo first (needed for lefthook)
+# Initialize git repository (needed for lefthook)
 RUN git init
 
-# Install dependencies and ensure patches are applied
+# Add n8n main repo as remote and fetch latest lockfile
+RUN git remote add upstream https://github.com/n8n-io/n8n.git && \
+    git fetch upstream main:main --depth 1 && \
+    git checkout main -- pnpm-lock.yaml
+
+# Install dependencies with frozen lockfile using the official lockfile
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
-    DOCKER_BUILD=true pnpm install --no-frozen-lockfile || true && \
-    DOCKER_BUILD=true pnpm patch-commit || true && \
-    DOCKER_BUILD=true pnpm install --no-frozen-lockfile
+    DOCKER_BUILD=true pnpm install --frozen-lockfile
 
 RUN pnpm build
 
@@ -110,6 +113,7 @@ RUN apt-get update && apt-get install -y \
 RUN useradd -ms /bin/bash node
 WORKDIR /home/node
 
+# Copy n8n from builder stage
 COPY --from=builder /compiled /usr/local/lib/node_modules/n8n
 
 # Setup the Task Runner Launcher
