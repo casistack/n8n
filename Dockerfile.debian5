@@ -36,9 +36,11 @@ COPY . .
 # Initialize git repo first (needed for lefthook)
 RUN git init
 
-# Install dependencies
+# Install dependencies and ensure patches are applied
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
+    DOCKER_BUILD=true pnpm install --no-frozen-lockfile || true && \
+    DOCKER_BUILD=true pnpm patch-commit || true && \
     DOCKER_BUILD=true pnpm install --no-frozen-lockfile
 
 RUN pnpm build
