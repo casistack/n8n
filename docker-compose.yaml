@@ -56,6 +56,9 @@ services:
       - CHROME_BIN=/usr/bin/chromium
       - CHROME_PATH=/usr/lib/chromium/
       - PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
+      - MCP_FIRE_CRAWL_API_URL=${MCP_FIRE_CRAWL_API_URL}
+      - MCP_FIRE_CRAWL_API_KEY=${MCP_FIRE_CRAWL_API_KEY}
+      
     ports:
       - ":5678"
     volumes:
