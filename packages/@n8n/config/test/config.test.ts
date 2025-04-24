@@ -115,10 +115,6 @@ describe('GlobalConfig', () => {
 		externalHooks: {
 			files: [],
 		},
-		externalSecrets: {
-			preferGet: false,
-			updateInterval: 300,
-		},
 		nodes: {
 			communityPackages: {
 				enabled: true,
@@ -142,20 +138,6 @@ describe('GlobalConfig', () => {
 			enabled: true,
 			endpoint: 'https://api.n8n.io/api/versions/',
 			infoUrl: 'https://docs.n8n.io/hosting/installation/updating/',
-		},
-		externalStorage: {
-			s3: {
-				host: '',
-				protocol: 'https',
-				bucket: {
-					name: '',
-					region: '',
-				},
-				credentials: {
-					accessKey: '',
-					accessSecret: '',
-				},
-			},
 		},
 		workflows: {
 			defaultName: 'My workflow',
@@ -315,6 +297,10 @@ describe('GlobalConfig', () => {
 		partialExecutions: {
 			version: 2,
 		},
+		workflowHistory: {
+			enabled: true,
+			pruneTime: -1,
+		},
 	};
 
 	it('should use all default values when no env variables are defined', () => {
@@ -404,6 +390,8 @@ describe('GlobalConfig', () => {
 		it('on invalid value, should warn and fall back to default value', () => {
 			process.env = {
 				N8N_RUNNERS_MODE: 'non-existing-mode',
+				N8N_RUNNERS_ENABLED: 'true',
+				DB_TYPE: 'postgresdb',
 			};
 
 			const globalConfig = Container.get(GlobalConfig);
@@ -413,6 +401,9 @@ describe('GlobalConfig', () => {
 					"Invalid value for N8N_RUNNERS_MODE - Invalid enum value. Expected 'internal' | 'external', received 'non-existing-mode'. Falling back to default value.",
 				),
 			);
+
+			expect(globalConfig.taskRunners.enabled).toEqual(true);
+			expect(globalConfig.database.type).toEqual('postgresdb');
 		});
 	});
 });
