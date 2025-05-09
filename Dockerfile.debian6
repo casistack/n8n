@@ -1,19 +1,36 @@
 # This line ensures that any prepended environment variables don't cause a parse error
 #FROM scratch AS empty
 
+# Build arguments that apply to all stages
+ARG BUILDPLATFORM=linux/amd64
+ARG TARGETPLATFORM=linux/amd64
+ARG NODE_VERSION=20
+ARG N8N_VERSION
+ARG DEBIAN_FRONTEND=noninteractive
+ARG DEBIAN_MIRROR=deb.debian.org
+ARG SKIP_NONESSENTIAL_PACKAGES=false
+ARG BUILD_MODE=production
+
 # 1. Create an image to build n8n
 # Using ARG for platform to make it configurable
 # This allows building for different architectures
-ARG BUILDPLATFORM=linux/amd64
-ARG TARGETPLATFORM=linux/amd64
 FROM --platform=${BUILDPLATFORM} debian:bookworm-slim AS builder
 
-# Using Debian-provided Node.js for better compatibility
+# Make build args available in this stage
+ARG NODE_VERSION
 ARG N8N_VERSION
-RUN echo "Building with Debian-provided Node.js version"
+ARG DEBIAN_FRONTEND
+ARG DEBIAN_MIRROR
+
+# Speed up apt by using a faster mirror if specified
+RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
+    sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list; \
+    fi
+
+RUN echo "Building with Node.js version: $NODE_VERSION and n8n version: $N8N_VERSION"
 
 # Install Node.js, necessary build tools, and configure environment in a single layer
-# Using Debian-provided nodejs and npm packages which are more reliable in this context
+# Use NodeSource for a faster installation with fewer dependencies
 RUN apt-get update && apt-get install --no-install-recommends -y \
     curl \
     ffmpeg \
@@ -23,9 +40,10 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     git \
     patch \
     jq \
-    nodejs \
-    npm \
     ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y nodejs \
     && npm --version \
     && node --version \
     && npm install -g npm@latest \
@@ -33,7 +51,9 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     && git config --global user.email "docker@build" \
     && git config --global user.name "Docker Build" \
     && git config --global init.defaultBranch main \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean autoclean \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Build the application from source
 WORKDIR /src
@@ -69,16 +89,28 @@ RUN mkdir /compiled && \
 # Using bookworm-slim which has fewer vulnerabilities
 FROM debian:bookworm-slim
 
+# Make build args available in this stage
+ARG NODE_VERSION
 ARG N8N_VERSION
 ARG N8N_RELEASE_TYPE=stable
 ARG BUILD_DATE
+ARG DEBIAN_FRONTEND
+ARG DEBIAN_MIRROR
+ARG SKIP_NONESSENTIAL_PACKAGES=false
+
 LABEL org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.title="n8n" \
       org.opencontainers.image.description="n8n - Workflow Automation" \
       org.opencontainers.image.licenses="Proprietary" \
       org.opencontainers.image.version="${N8N_VERSION}" \
       security.hardened="true"
-RUN echo "Running with Debian-provided Node.js and n8n version: $N8N_VERSION"
+
+# Speed up apt by using a faster mirror if specified
+RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
+    sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list; \
+    fi
+
+RUN echo "Running with Node.js version: $NODE_VERSION and n8n version: $N8N_VERSION"
 
 ENV NODE_ENV=production
 ENV N8N_VERSION=$N8N_VERSION
@@ -95,36 +127,40 @@ ENV CHROME_PATH=/usr/lib/chromium/
 
 # Install all necessary packages in a single layer to reduce image size and build time
 # Also create user and set up directory structure
-# Using Debian-provided nodejs and npm packages which are more reliable in this context
+# Using NodeSource for a faster installation with fewer dependencies
 RUN apt-get update && apt-get install --no-install-recommends -y \
     curl \
     ffmpeg \
-    iputils-ping \
-    nano \
     gnupg \
     tini \
-    chromium \
-    libgtk2.0-0 \
-    libgtk-3-0 \
-    libgbm-dev \
-    libnotify-dev \
-    libgconf-2-4 \
-    libnss3 \
-    libxss1 \
-    libasound2 \
-    libxtst6 \
-    xauth \
-    xvfb \
-    graphicsmagick \
     wget \
-    nodejs \
-    npm \
     ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y nodejs \
     && npm --version \
     && node --version \
     && npm install -g npm@latest \
     && useradd -ms /bin/bash node \
     && mkdir -p /home/node/.n8n \
+    && if [ "$SKIP_NONESSENTIAL_PACKAGES" = "false" ]; then \
+        apt-get install --no-install-recommends -y \
+        iputils-ping \
+        nano \
+        chromium \
+        libgtk2.0-0 \
+        libgtk-3-0 \
+        libgbm-dev \
+        libnotify-dev \
+        libgconf-2-4 \
+        libnss3 \
+        libxss1 \
+        libasound2 \
+        libxtst6 \
+        xauth \
+        xvfb \
+        graphicsmagick; \
+    fi \
     && apt-get clean autoclean \
     && apt-get autoremove --yes \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archives/*.deb
