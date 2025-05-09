@@ -8,12 +8,12 @@ ARG BUILDPLATFORM=linux/amd64
 ARG TARGETPLATFORM=linux/amd64
 FROM --platform=${BUILDPLATFORM} debian:bookworm-slim AS builder
 
-# Use a specific Node.js version to improve security and stability
-ARG NODE_VERSION=20.12.1
+# Using Debian-provided Node.js for better compatibility
 ARG N8N_VERSION
-RUN echo "Building with Node.js version: $NODE_VERSION"
+RUN echo "Building with Debian-provided Node.js version"
 
 # Install Node.js, necessary build tools, and configure environment in a single layer
+# Using Debian-provided nodejs and npm packages which are more reliable in this context
 RUN apt-get update && apt-get install --no-install-recommends -y \
     curl \
     ffmpeg \
@@ -23,9 +23,13 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     git \
     patch \
     jq \
-    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION%%.*}.x | bash - \
-    && apt-get install -y nodejs \
-    && npm install -g npm@latest pnpm \
+    nodejs \
+    npm \
+    ca-certificates \
+    && npm --version \
+    && node --version \
+    && npm install -g npm@latest \
+    && npm install -g pnpm \
     && git config --global user.email "docker@build" \
     && git config --global user.name "Docker Build" \
     && git config --global init.defaultBranch main \
@@ -65,7 +69,6 @@ RUN mkdir /compiled && \
 # Using bookworm-slim which has fewer vulnerabilities
 FROM debian:bookworm-slim
 
-ARG NODE_VERSION
 ARG N8N_VERSION
 ARG N8N_RELEASE_TYPE=stable
 ARG BUILD_DATE
@@ -75,12 +78,11 @@ LABEL org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.licenses="Proprietary" \
       org.opencontainers.image.version="${N8N_VERSION}" \
       security.hardened="true"
-RUN echo "Running with Node.js version: $NODE_VERSION and n8n version: $N8N_VERSION"
+RUN echo "Running with Debian-provided Node.js and n8n version: $N8N_VERSION"
 
 ENV NODE_ENV=production
 ENV N8N_VERSION=$N8N_VERSION
 ENV N8N_ENVIRONMENT=production
-ENV NODE_VERSION=$NODE_VERSION
 ENV N8N_RELEASE_TYPE=$N8N_RELEASE_TYPE
 ENV N8N_PATH=/
 ENV GENERIC_TIMEZONE=Europe/London
@@ -93,6 +95,7 @@ ENV CHROME_PATH=/usr/lib/chromium/
 
 # Install all necessary packages in a single layer to reduce image size and build time
 # Also create user and set up directory structure
+# Using Debian-provided nodejs and npm packages which are more reliable in this context
 RUN apt-get update && apt-get install --no-install-recommends -y \
     curl \
     ffmpeg \
@@ -114,8 +117,11 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     xvfb \
     graphicsmagick \
     wget \
-    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION%%.*}.x | bash - \
-    && apt-get install -y nodejs \
+    nodejs \
+    npm \
+    ca-certificates \
+    && npm --version \
+    && node --version \
     && npm install -g npm@latest \
     && useradd -ms /bin/bash node \
     && mkdir -p /home/node/.n8n \
