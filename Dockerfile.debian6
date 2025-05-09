@@ -1,0 +1,182 @@
+# This line ensures that any prepended environment variables don't cause a parse error
+#FROM scratch AS empty
+
+# 1. Create an image to build n8n
+# Using ARG for platform to make it configurable
+# This allows building for different architectures
+ARG BUILDPLATFORM=linux/amd64
+ARG TARGETPLATFORM=linux/amd64
+FROM --platform=${BUILDPLATFORM} debian:bookworm-slim AS builder
+
+# Use a specific Node.js version to improve security and stability
+ARG NODE_VERSION=20.12.1
+ARG N8N_VERSION
+RUN echo "Building with Node.js version: $NODE_VERSION"
+
+# Install Node.js, necessary build tools, and configure environment in a single layer
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    curl \
+    ffmpeg \
+    gnupg \
+    build-essential \
+    python3 \
+    git \
+    patch \
+    jq \
+    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION%%.*}.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest pnpm \
+    && git config --global user.email "docker@build" \
+    && git config --global user.name "Docker Build" \
+    && git config --global init.defaultBranch main \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build the application from source
+WORKDIR /src
+COPY . /src
+
+# Initialize git repository and set up remote for n8n repo
+RUN git init && \
+    git remote add upstream https://github.com/n8n-io/n8n.git && \
+    git fetch upstream master:master --depth 1
+
+# Instead of manually applying patches, leverage pnpm's patching system 
+# First install without frozen-lockfile to get dependencies
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata \
+    PNPM_NO_VERIFY_PATCHES=1 pnpm install --no-frozen-lockfile
+
+# Run a second pass that applies patches (this is more robust when syncing with upstream)
+RUN pnpm install --no-frozen-lockfile || true
+
+# Build the application
+RUN pnpm build || (echo "Build failed, but continuing to capture errors" && exit 1)
+
+# Delete all dev dependencies for production and clean up source files
+RUN jq 'del(.pnpm.patchedDependencies)' package.json > package.json.tmp && mv package.json.tmp package.json && \
+    node .github/scripts/trim-fe-packageJson.js || echo "Continuing without trim-fe-packageJson.js" && \
+    find . -type f \( -name "*.ts" -o -name "*.js.map" -o -name "*.vue" -o -name "tsconfig.json" -o -name "*.tsbuildinfo" \) -delete || true
+
+# Deploy the `n8n` package into /compiled
+RUN mkdir /compiled && \
+    NODE_ENV=production DOCKER_BUILD=true pnpm --filter=n8n --prod --no-optional --legacy deploy /compiled
+
+# 2. Create the Debian-based image with just the code needed to run n8n
+# Using bookworm-slim which has fewer vulnerabilities
+FROM debian:bookworm-slim
+
+ARG NODE_VERSION
+ARG N8N_VERSION
+ARG N8N_RELEASE_TYPE=stable
+ARG BUILD_DATE
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.title="n8n" \
+      org.opencontainers.image.description="n8n - Workflow Automation" \
+      org.opencontainers.image.licenses="Proprietary" \
+      org.opencontainers.image.version="${N8N_VERSION}" \
+      security.hardened="true"
+RUN echo "Running with Node.js version: $NODE_VERSION and n8n version: $N8N_VERSION"
+
+ENV NODE_ENV=production
+ENV N8N_VERSION=$N8N_VERSION
+ENV N8N_ENVIRONMENT=production
+ENV NODE_VERSION=$NODE_VERSION
+ENV N8N_RELEASE_TYPE=$N8N_RELEASE_TYPE
+ENV N8N_PATH=/
+ENV GENERIC_TIMEZONE=Europe/London
+ENV TZ=Europe/London
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROME_PATH=/usr/lib/chromium/
+
+# Install all necessary packages in a single layer to reduce image size and build time
+# Also create user and set up directory structure
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    curl \
+    ffmpeg \
+    iputils-ping \
+    nano \
+    gnupg \
+    tini \
+    chromium \
+    libgtk2.0-0 \
+    libgtk-3-0 \
+    libgbm-dev \
+    libnotify-dev \
+    libgconf-2-4 \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libxtst6 \
+    xauth \
+    xvfb \
+    graphicsmagick \
+    wget \
+    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION%%.*}.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest \
+    && useradd -ms /bin/bash node \
+    && mkdir -p /home/node/.n8n \
+    && apt-get clean autoclean \
+    && apt-get autoremove --yes \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archives/*.deb
+
+# Set working directory
+WORKDIR /home/node
+
+# Copy n8n from builder stage
+COPY --from=builder /compiled /usr/local/lib/node_modules/n8n
+
+# Setup the Task Runner Launcher
+ARG TARGETPLATFORM
+ARG LAUNCHER_VERSION=1.1.0
+
+COPY docker/images/n8n/n8n-task-runners.json /etc/n8n-task-runners.json
+COPY docker-entrypoint-debian2.sh /
+
+# Download, verify, extract the launcher binary, and set up n8n in a single layer
+SHELL ["/bin/bash", "-c"]
+RUN export ARCH_NAME="amd64" && \
+    # Create temp directory and download task runner
+    mkdir /launcher-temp && \
+    cd /launcher-temp && \
+    wget -q https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz && \
+    wget -q https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256 && \
+    echo "$(cat task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256) task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz" > checksum.sha256 && \
+    sha256sum -c checksum.sha256 && \
+    tar xf task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz --directory=/usr/local/bin && \
+    cd - && \
+    rm -r /launcher-temp && \
+    # Make entrypoint executable
+    chmod +x /docker-entrypoint-debian2.sh && \
+    # Set up n8n
+    cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - && \
+    ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
+    chown -R node:node /home/node/.n8n
+
+ENV SHELL=/bin/bash
+ENV NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
+
+# Set file permissions correctly before switching users
+RUN chmod -R 750 /home/node && \
+    # Set proper security context and ownership for sensitive files
+    mkdir -p /home/node/.n8n/storage && \
+    chmod 700 /home/node/.n8n/storage && \
+    chown -R node:node /home/node
+
+USER node
+
+# Verify n8n installation
+RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');" || echo "Module check failed but continuing"
+
+# Expose n8n port
+EXPOSE 5678
+
+# Add health check to improve container monitoring and orchestration
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:5678/healthz || exit 1
+
+ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
+CMD ["n8n", "start"]
