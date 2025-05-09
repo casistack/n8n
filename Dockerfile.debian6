@@ -4,6 +4,10 @@
 # Build arguments that apply to all stages
 ARG BUILDPLATFORM=linux/amd64
 ARG TARGETPLATFORM=linux/amd64
+# NODE_VERSION should be just the major version number (e.g., 20 or 21)
+# NodeSource APT repository requires only the major version number
+# Even if a full version like 20.15.0 is provided, we handle extraction of major version in the RUN commands
+# IMPORTANT: When building with docker build, pass only the major version, e.g.: --build-arg NODE_VERSION=20
 ARG NODE_VERSION=20
 ARG N8N_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
@@ -27,7 +31,7 @@ RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
     sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list; \
     fi
 
-RUN echo "Building with Node.js version: $NODE_VERSION and n8n version: $N8N_VERSION"
+RUN echo "Building with Node.js version: $NODE_VERSION (will use major version only for repository) and n8n version: $N8N_VERSION"
 
 # Install Node.js, necessary build tools, and configure environment in a single layer
 # Use NodeSource for a faster installation with fewer dependencies
@@ -42,8 +46,11 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     jq \
     ca-certificates \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
-    && apt-get update && apt-get install -y nodejs \
+    && NODE_MAJOR_VERSION=$(echo ${NODE_VERSION} | cut -d. -f1) \
+    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y nodejs || (echo "Failed to install Node.js, retrying with fallback method" && \
+       curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash - && \
+       apt-get install -y nodejs) \
     && npm --version \
     && node --version \
     && npm install -g npm@latest \
@@ -110,7 +117,7 @@ RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
     sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list; \
     fi
 
-RUN echo "Running with Node.js version: $NODE_VERSION and n8n version: $N8N_VERSION"
+RUN echo "Running with Node.js version: $NODE_VERSION (will use major version only for repository) and n8n version: $N8N_VERSION"
 
 ENV NODE_ENV=production
 ENV N8N_VERSION=$N8N_VERSION
@@ -136,8 +143,11 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     wget \
     ca-certificates \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
-    && apt-get update && apt-get install -y nodejs \
+    && NODE_MAJOR_VERSION=$(echo ${NODE_VERSION} | cut -d. -f1) \
+    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y nodejs || (echo "Failed to install Node.js, retrying with fallback method" && \
+       curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash - && \
+       apt-get install -y nodejs) \
     && npm --version \
     && node --version \
     && npm install -g npm@latest \
