@@ -3,7 +3,7 @@ services:
   n8n:
     build:
       context: .
-      dockerfile: Dockerfile.debian6
+      dockerfile: Dockerfile.debian7
       args:
         #- N8N_VERSION=${N8N_VERSION:-latest}
         - N8N_VERSION=latest
