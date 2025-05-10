@@ -1,41 +1,49 @@
+# First declare ARG for N8N_VERSION to use in FROM
 ARG N8N_VERSION=latest
 
-# Then use the ARG in the FROM line
-FROM n8nio/n8n:${N8N_VERSION}
+# Start with debian slim as the base
+FROM debian:bookworm-slim
 
-# Declare other ARGs after FROM
+# Redeclare ARG after FROM
+ARG N8N_VERSION
+ARG NODE_VERSION=20
 ARG DEBIAN_FRONTEND=noninteractive
 ARG DEBIAN_MIRROR=deb.debian.org
 ARG SKIP_NONESSENTIAL_PACKAGES=false
-ARG NODE_VERSION=20
 ARG N8N_RELEASE_TYPE=stable
 
-# Make sure we log what version we're working with
-RUN echo "Using n8n version: $(n8n --version) with Node.js $(node --version)"
-
-# Set environment variables for browser automation
+# Set environment variables
+ENV NODE_ENV=production
+ENV N8N_VERSION=$N8N_VERSION
+ENV N8N_ENVIRONMENT=production
+ENV N8N_RELEASE_TYPE=$N8N_RELEASE_TYPE
+ENV N8N_PATH=/
+ENV GENERIC_TIMEZONE=Europe/London
+ENV TZ=Europe/London
+ENV DEBIAN_FRONTEND=noninteractive
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV CHROME_BIN=/usr/bin/chromium
 ENV CHROME_PATH=/usr/lib/chromium/
-ENV N8N_PATH=/
-ENV GENERIC_TIMEZONE=Europe/London
-ENV TZ=Europe/London
-ENV NODE_ENV=production
-ENV N8N_ENVIRONMENT=production
-ENV N8N_RELEASE_TYPE=${N8N_RELEASE_TYPE}
-ENV NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
 
-USER root
-
-# Speed up apt by using a faster mirror if specified
-RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
-    sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list; \
-    fi
-
-# Install the necessary packages for Puppeteer, Chrome, etc.
-RUN apt-get update && \
-    if [ "$SKIP_NONESSENTIAL_PACKAGES" = "false" ]; then \
+# Install Node.js and required packages
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    curl \
+    ffmpeg \
+    gnupg \
+    tini \
+    wget \
+    ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg \
+    && NODE_MAJOR_VERSION=$(echo ${NODE_VERSION} | cut -d. -f1) \
+    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y nodejs \
+    && npm --version \
+    && node --version \
+    && npm install -g npm@latest \
+    && useradd -ms /bin/bash node \
+    && mkdir -p /home/node/.n8n \
+    && if [ "$SKIP_NONESSENTIAL_PACKAGES" = "false" ]; then \
         apt-get install --no-install-recommends -y \
         iputils-ping \
         nano \
@@ -52,33 +60,48 @@ RUN apt-get update && \
         xauth \
         xvfb \
         graphicsmagick; \
+    fi \
+    && apt-get clean autoclean \
+    && apt-get autoremove --yes \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archives/*.deb
+
+# Set working directory
+WORKDIR /home/node
+
+# Install n8n via npm
+RUN npm config set update-notifier false && \
+    if [ "$N8N_VERSION" = "latest" ]; then \
+      npm install -g n8n; \
+    else \
+      npm install -g n8n@${N8N_VERSION}; \
     fi && \
-    # Clean up
-    apt-get clean autoclean && \
-    apt-get autoremove --yes && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archives/*.deb
+    echo "Installed n8n version: $(n8n --version) with Node.js $(node --version)"
 
 # Copy your custom entrypoint script (if needed)
 COPY docker-entrypoint-debian2.sh /
 
-# Make the entrypoint script executable
+# Set correct permissions
 RUN chmod +x /docker-entrypoint-debian2.sh && \
     # Set up required directories
     mkdir -p /home/node/.n8n/storage && \
     chmod 700 /home/node/.n8n/storage && \
     chown -R node:node /home/node
 
+# Set environment variables for Node.js
+ENV NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
+
 # Verify n8n and package availability
 RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');" || echo "Module check failed but continuing" && \
     [ -f "$PUPPETEER_EXECUTABLE_PATH" ] && echo "Chromium successfully installed" || echo "Warning: Chromium not found at expected path"
 
-# The base image already has HEALTHCHECK and EXPOSE configured, 
-# but we'll add them explicitly for clarity
+# Expose n8n port
 EXPOSE 5678
+
+# Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:5678/healthz || exit 1
 
-# Switch back to the node user (which is used in the base n8n image)
+# Switch to non-root user
 USER node
 
 ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
