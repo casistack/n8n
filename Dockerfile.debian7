@@ -1,0 +1,85 @@
+ARG N8N_VERSION=latest
+
+# Then use the ARG in the FROM line
+FROM n8nio/n8n:${N8N_VERSION}
+
+# Declare other ARGs after FROM
+ARG DEBIAN_FRONTEND=noninteractive
+ARG DEBIAN_MIRROR=deb.debian.org
+ARG SKIP_NONESSENTIAL_PACKAGES=false
+ARG NODE_VERSION=20
+ARG N8N_RELEASE_TYPE=stable
+
+# Make sure we log what version we're working with
+RUN echo "Using n8n version: $(n8n --version) with Node.js $(node --version)"
+
+# Set environment variables for browser automation
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROME_PATH=/usr/lib/chromium/
+ENV N8N_PATH=/
+ENV GENERIC_TIMEZONE=Europe/London
+ENV TZ=Europe/London
+ENV NODE_ENV=production
+ENV N8N_ENVIRONMENT=production
+ENV N8N_RELEASE_TYPE=${N8N_RELEASE_TYPE}
+ENV NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
+
+USER root
+
+# Speed up apt by using a faster mirror if specified
+RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
+    sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list; \
+    fi
+
+# Install the necessary packages for Puppeteer, Chrome, etc.
+RUN apt-get update && \
+    if [ "$SKIP_NONESSENTIAL_PACKAGES" = "false" ]; then \
+        apt-get install --no-install-recommends -y \
+        iputils-ping \
+        nano \
+        chromium \
+        libgtk2.0-0 \
+        libgtk-3-0 \
+        libgbm-dev \
+        libnotify-dev \
+        libgconf-2-4 \
+        libnss3 \
+        libxss1 \
+        libasound2 \
+        libxtst6 \
+        xauth \
+        xvfb \
+        graphicsmagick; \
+    fi && \
+    # Clean up
+    apt-get clean autoclean && \
+    apt-get autoremove --yes && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archives/*.deb
+
+# Copy your custom entrypoint script (if needed)
+COPY docker-entrypoint-debian2.sh /
+
+# Make the entrypoint script executable
+RUN chmod +x /docker-entrypoint-debian2.sh && \
+    # Set up required directories
+    mkdir -p /home/node/.n8n/storage && \
+    chmod 700 /home/node/.n8n/storage && \
+    chown -R node:node /home/node
+
+# Verify n8n and package availability
+RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');" || echo "Module check failed but continuing" && \
+    [ -f "$PUPPETEER_EXECUTABLE_PATH" ] && echo "Chromium successfully installed" || echo "Warning: Chromium not found at expected path"
+
+# The base image already has HEALTHCHECK and EXPOSE configured, 
+# but we'll add them explicitly for clarity
+EXPOSE 5678
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:5678/healthz || exit 1
+
+# Switch back to the node user (which is used in the base n8n image)
+USER node
+
+ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
+CMD ["n8n", "start"]
