@@ -9,7 +9,7 @@ FROM node:${NODE_VERSION}-bookworm-slim
 ARG N8N_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
 ARG DEBIAN_MIRROR=deb.debian.org
-ARG SKIP_NONESSENTIAL_PACKAGES=true
+ARG SKIP_NONESSENTIAL_PACKAGES=false
 ARG N8N_RELEASE_TYPE=stable
 
 # Set environment variables - consolidated to reduce layers
@@ -24,8 +24,7 @@ ENV NODE_ENV=production \
 	PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 	PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
 	CHROME_BIN=/usr/bin/chromium \
-	CHROME_PATH=/usr/lib/chromium/ \
-	PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
+	CHROME_PATH=/usr/lib/chromium/
 
 # Speed up apt by using a faster mirror if specified
 RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
