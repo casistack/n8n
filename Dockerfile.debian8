@@ -32,7 +32,7 @@ RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
 	fi
 
 # Install required packages (Node.js and npm already included in base image)
-RUN apt-get update --no-cache && apt-get install --no-install-recommends -y \
+RUN apt-get update && apt-get install --no-install-recommends -y \
 	ffmpeg \
 	tini \
 	curl \
