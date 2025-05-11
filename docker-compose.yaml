@@ -58,7 +58,7 @@ services:
       - PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
       - MCP_FIRE_CRAWL_API_URL=${MCP_FIRE_CRAWL_API_URL}
       - MCP_FIRE_CRAWL_API_KEY=${MCP_FIRE_CRAWL_API_KEY}
-      
+
     ports:
       - ":5678"
     volumes:
@@ -66,6 +66,10 @@ services:
       - ./n8n/nodes:/home/node/.n8n/nodes
     depends_on:
       - postgres
+    deploy:
+      resources:
+        limits:
+          memory: 2G
   postgres:
     image: postgres:16-alpine
     restart: always
@@ -78,6 +82,10 @@ services:
       - "12000:10000"
     volumes:
       - postgres_data_n8n_annex:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 volumes:
   n8n_data_annex:
   postgres_data_n8n_annex:
