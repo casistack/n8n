@@ -24,7 +24,8 @@ ENV NODE_ENV=production \
 	PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 	PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
 	CHROME_BIN=/usr/bin/chromium \
-	CHROME_PATH=/usr/lib/chromium/
+	CHROME_PATH=/usr/lib/chromium/ \
+	PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
 
 # Speed up apt by using a faster mirror if specified
 RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
