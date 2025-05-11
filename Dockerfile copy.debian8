@@ -62,18 +62,12 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 # Set working directory
 WORKDIR /home/node
 
-# Install n8n via npm with maximum optimization to prevent timeouts
+# Install n8n via npm with optimized cache handling
 RUN npm config set update-notifier false && \
-	npm config set legacy-peer-deps true && \
-	npm config set fetch-retries 5 && \
-	npm config set fetch-retry-mintimeout 20000 && \
-	npm config set fetch-retry-maxtimeout 120000 && \
-	npm config set loglevel error && \
-	npm config set fetch-timeout 600000 && \
 	if [ "$N8N_VERSION" = "latest" ]; then \
-	npm install -g n8n --omit=dev --no-fund --no-audit --ignore-scripts --no-optional --prefer-offline; \
+	npm install -g n8n --omit=dev --no-fund --no-audit; \
 	else \
-	npm install -g n8n@${N8N_VERSION} --omit=dev --no-fund --no-audit --ignore-scripts --no-optional --prefer-offline; \
+	npm install -g n8n@${N8N_VERSION} --omit=dev --no-fund --no-audit; \
 	fi && \
 	npm cache clean --force && \
 	echo "Installed n8n version: $(n8n --version) with Node.js $(node --version)"
