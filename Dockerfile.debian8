@@ -71,10 +71,11 @@ RUN npm config set update-notifier false && \
 	npm config set loglevel error && \
 	npm config set fetch-timeout 600000 && \
 	if [ "$N8N_VERSION" = "latest" ]; then \
-	npm install -g n8n --omit=dev --no-fund --no-audit --ignore-scripts --no-optional --prefer-offline; \
+	npm install -g n8n --omit=dev --no-fund --no-audit --no-optional --prefer-offline; \
 	else \
-	npm install -g n8n@${N8N_VERSION} --omit=dev --no-fund --no-audit --ignore-scripts --no-optional --prefer-offline; \
+	npm install -g n8n@${N8N_VERSION} --omit=dev --no-fund --no-audit --no-optional --prefer-offline; \
 	fi && \
+	cd /usr/local/lib/node_modules/n8n && npm rebuild sqlite3 && cd - && \
 	npm cache clean --force && \
 	echo "Installed n8n version: $(n8n --version) with Node.js $(node --version)"
 
