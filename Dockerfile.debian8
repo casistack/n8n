@@ -12,19 +12,19 @@ ARG DEBIAN_MIRROR=deb.debian.org
 ARG SKIP_NONESSENTIAL_PACKAGES=true
 ARG N8N_RELEASE_TYPE=stable
 
-# Set environment variables
-ENV NODE_ENV=production
-ENV N8N_VERSION=$N8N_VERSION
-ENV N8N_ENVIRONMENT=production
-ENV N8N_RELEASE_TYPE=$N8N_RELEASE_TYPE
-ENV N8N_PATH=/
-ENV GENERIC_TIMEZONE=Europe/London
-ENV TZ=Europe/London
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV CHROME_BIN=/usr/bin/chromium
-ENV CHROME_PATH=/usr/lib/chromium/
+# Set environment variables - consolidated to reduce layers
+ENV NODE_ENV=production \
+	N8N_VERSION=$N8N_VERSION \
+	N8N_ENVIRONMENT=production \
+	N8N_RELEASE_TYPE=$N8N_RELEASE_TYPE \
+	N8N_PATH=/ \
+	GENERIC_TIMEZONE=Europe/London \
+	TZ=Europe/London \
+	DEBIAN_FRONTEND=noninteractive \
+	PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+	PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+	CHROME_BIN=/usr/bin/chromium \
+	CHROME_PATH=/usr/lib/chromium/
 
 # Speed up apt by using a faster mirror if specified
 RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
@@ -36,12 +36,12 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 	ffmpeg \
 	tini \
 	curl \
+	chromium \
 	&& mkdir -p /home/node/.n8n \
 	&& if [ "$SKIP_NONESSENTIAL_PACKAGES" = "false" ]; then \
 	apt-get install --no-install-recommends -y \
 	iputils-ping \
 	nano \
-	chromium \
 	libgtk2.0-0 \
 	libgtk-3-0 \
 	libgbm-dev \
@@ -62,13 +62,14 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 # Set working directory
 WORKDIR /home/node
 
-# Install n8n via npm
+# Install n8n via npm with optimized cache handling
 RUN npm config set update-notifier false && \
 	if [ "$N8N_VERSION" = "latest" ]; then \
-	npm install -g n8n --production; \
+	npm install -g n8n --production --no-fund --no-audit; \
 	else \
-	npm install -g n8n@${N8N_VERSION} --production; \
+	npm install -g n8n@${N8N_VERSION} --production --no-fund --no-audit; \
 	fi && \
+	npm cache clean --force && \
 	echo "Installed n8n version: $(n8n --version) with Node.js $(node --version)"
 
 # Copy your custom entrypoint script (if needed)
