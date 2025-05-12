@@ -63,5 +63,12 @@ if ! command -v n8n &> /dev/null; then
     exit 1
 fi
 
+echo "Cleaning up Chrome lock files..."
+rm -f /data2/session-session/SingletonLock
+rm -f /data2/session-session/SingletonCookie
+rm -f /data2/session-session/SingletonSocket
+rm -f /data2/session-session/DevToolsActivePort
+echo "Chrome lock files cleaned up"
+
 # Execute the main command
 exec "$@"
