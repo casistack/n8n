@@ -9,7 +9,7 @@ FROM node:${NODE_VERSION}-bookworm-slim
 ARG N8N_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
 ARG DEBIAN_MIRROR=deb.debian.org
-ARG SKIP_NONESSENTIAL_PACKAGES=false
+ARG SKIP_NONESSENTIAL_PACKAGES=true
 ARG N8N_RELEASE_TYPE=stable
 
 # Set environment variables - consolidated to reduce layers
@@ -37,6 +37,11 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 	tini \
 	curl \
 	chromium \
+	libgtk-3-0 \
+    libgbm-dev \
+    libnss3 \
+    libxss1 \
+    xvfb \
 	&& mkdir -p /home/node/.n8n \
 	&& if [ "$SKIP_NONESSENTIAL_PACKAGES" = "false" ]; then \
 	apt-get install --no-install-recommends -y \
