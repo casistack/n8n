@@ -67,6 +67,10 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 # Set working directory
 WORKDIR /home/node
 
+# Add this before the npm install section
+ARG BUILD_DATE
+ENV BUILD_DATE=$BUILD_DATE
+
 # Install n8n via npm with maximum optimization to prevent timeouts
 RUN npm config set update-notifier false && \
 	npm config set legacy-peer-deps true && \

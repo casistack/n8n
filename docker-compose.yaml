@@ -5,12 +5,12 @@ services:
       context: .
       dockerfile: Dockerfile.debian8
       args:
-        #- N8N_VERSION=${N8N_VERSION:-latest}
         - N8N_VERSION=latest
         - NODE_VERSION=${NODE_VERSION:-20}
         - N8N_ENVIRONMENT=production
         - NODE_ENV=production
         - N8N_RELEASE_TYPE=stable
+        - BUILD_DATE=$(date +%Y%m%d%H%M%S)
     restart: always
     environment:
       - DB_TYPE=postgresdb
