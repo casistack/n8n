@@ -10,7 +10,6 @@ services:
         - N8N_ENVIRONMENT=production
         - NODE_ENV=production
         - N8N_RELEASE_TYPE=stable
-        - BUILD_DATE=$(date +%Y%m%d%H%M%S)
     restart: always
     environment:
       - DB_TYPE=postgresdb
@@ -60,7 +59,7 @@ services:
       - MCP_FIRE_CRAWL_API_KEY=${MCP_FIRE_CRAWL_API_KEY}
 
     ports:
-      - ":5678"
+      - ':5678'
     volumes:
       - n8n_data_annex:/data2
       - ./n8n/nodes:/home/node/.n8n/nodes
@@ -78,8 +77,8 @@ services:
       - POSTGRES_USER=${DB_POSTGRESDB_USER:-n8n}
       - POSTGRES_PASSWORD=${DB_POSTGRESDB_PASSWORD}
     ports:
-      - "5433:5432"
-      - "12000:10000"
+      - '5433:5432'
+      - '12000:10000'
     volumes:
       - postgres_data_n8n_annex:/var/lib/postgresql/data
     deploy:
