@@ -7,6 +7,7 @@ import {
 	REGULAR_NODE_CREATOR_VIEW,
 	TRIGGER_NODE_CREATOR_VIEW,
 	AI_UNCATEGORIZED_CATEGORY,
+	AI_EVALUATION,
 } from '@/constants';
 
 import { useNodeCreatorStore } from '@/stores/nodeCreator.store';
@@ -17,7 +18,7 @@ import { useKeyboardNavigation } from '../composables/useKeyboardNavigation';
 import SearchBar from './SearchBar.vue';
 import ActionsRenderer from '../Modes/ActionsMode.vue';
 import NodesRenderer from '../Modes/NodesMode.vue';
-import { useI18n } from '@/composables/useI18n';
+import { useI18n } from '@n8n/i18n';
 import { useDebounce } from '@/composables/useDebounce';
 import NodeIcon from '@/components/NodeIcon.vue';
 
@@ -25,6 +26,7 @@ import CommunityNodeDetails from './CommunityNodeDetails.vue';
 import CommunityNodeInfo from './CommunityNodeInfo.vue';
 import CommunityNodeDocsLink from './CommunityNodeDocsLink.vue';
 import CommunityNodeFooter from './CommunityNodeFooter.vue';
+import { useUsersStore } from '@/stores/users.store';
 
 const i18n = useI18n();
 const { callDebounced } = useDebounce();
@@ -33,6 +35,8 @@ const { mergedNodes } = useNodeCreatorStore();
 const { pushViewStack, popViewStack, updateCurrentViewStack } = useViewStacks();
 const { setActiveItemIndex, attachKeydownEvent, detachKeydownEvent } = useKeyboardNavigation();
 const nodeCreatorStore = useNodeCreatorStore();
+
+const { isInstanceOwner } = useUsersStore();
 
 const activeViewStack = computed(() => useViewStacks().activeViewStack);
 
@@ -123,6 +127,7 @@ watch(
 			[AI_NODE_CREATOR_VIEW]: AIView,
 			[AI_OTHERS_NODE_CREATOR_VIEW]: AINodesView,
 			[AI_UNCATEGORIZED_CATEGORY]: AINodesView,
+			[AI_EVALUATION]: AINodesView,
 		};
 
 		const itemKey = selectedView;
@@ -233,6 +238,7 @@ function onBackButton() {
 			<CommunityNodeFooter
 				v-if="communityNodeDetails && !isCommunityNodeActionsMode"
 				:package-name="communityNodeDetails.packageName"
+				:show-manage="communityNodeDetails.installed && isInstanceOwner"
 			/>
 		</aside>
 	</transition>

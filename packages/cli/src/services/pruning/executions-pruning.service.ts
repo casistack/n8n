@@ -1,13 +1,14 @@
+import { Logger } from '@n8n/backend-common';
 import { ExecutionsConfig } from '@n8n/config';
 import { ExecutionRepository } from '@n8n/db';
 import { OnLeaderStepdown, OnLeaderTakeover, OnShutdown } from '@n8n/decorators';
 import { Service } from '@n8n/di';
-import { BinaryDataService, InstanceSettings, Logger } from 'n8n-core';
+import { BinaryDataService, InstanceSettings } from 'n8n-core';
 import { ensureError } from 'n8n-workflow';
 import { strict } from 'node:assert';
 
 import { Time } from '@/constants';
-import { connectionState as dbConnectionState } from '@/db';
+import { DbConnection } from '@/databases/db-connection';
 
 /**
  * Responsible for deleting old executions from the database and deleting their
@@ -43,6 +44,7 @@ export class ExecutionsPruningService {
 	constructor(
 		private readonly logger: Logger,
 		private readonly instanceSettings: InstanceSettings,
+		private readonly dbConnection: DbConnection,
 		private readonly executionRepository: ExecutionRepository,
 		private readonly binaryDataService: BinaryDataService,
 		private readonly executionsConfig: ExecutionsConfig,
@@ -66,7 +68,8 @@ export class ExecutionsPruningService {
 
 	@OnLeaderTakeover()
 	startPruning() {
-		if (!this.isEnabled || !dbConnectionState.migrated || this.isShuttingDown) return;
+		const { connectionState } = this.dbConnection;
+		if (!this.isEnabled || !connectionState.migrated || this.isShuttingDown) return;
 
 		this.scheduleRollingSoftDeletions();
 		this.scheduleNextHardDeletion();

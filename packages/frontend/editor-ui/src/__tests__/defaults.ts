@@ -44,9 +44,6 @@ export const defaultSettings: FrontendSettings = {
 			},
 		},
 	},
-	expressions: {
-		evaluator: 'tournament',
-	},
 	executionMode: 'regular',
 	isMultiMain: false,
 	executionTimeout: 0,
@@ -162,5 +159,8 @@ export const defaultSettings: FrontendSettings = {
 	},
 	logsView: {
 		enabled: false,
+	},
+	evaluation: {
+		quota: 0,
 	},
 };

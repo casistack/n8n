@@ -94,19 +94,10 @@ describe('Undo/Redo', () => {
 			.then(($node) => {
 				const { x: x1, y: y1 } = $node[0].getBoundingClientRect();
 
-				cy.ifCanvasVersion(
-					() => {
-						cy.drag('[data-test-id="canvas-node"].jtk-drag-selected', [50, 150], {
-							clickToFinish: true,
-						});
-					},
-					() => {
-						cy.drag(getCanvasNodes().last(), [50, 150], {
-							realMouse: true,
-							abs: true,
-						});
-					},
-				);
+				cy.drag(getCanvasNodes().last(), [50, 150], {
+					realMouse: true,
+					abs: true,
+				});
 
 				getCanvasNodes()
 					.last()
@@ -218,6 +209,7 @@ describe('Undo/Redo', () => {
 		WorkflowPage.getters.nodeConnections().should('have.length', 1);
 		cy.get(WorkflowPage.getters.getEndpointSelector('input', 'Switch')).should('have.length', 1);
 
+		cy.wait(1000); // Clipboard paste is throttled
 		cy.fixture('Test_workflow_form_switch.json').then((data) => {
 			cy.get('body').paste(JSON.stringify(data));
 		});

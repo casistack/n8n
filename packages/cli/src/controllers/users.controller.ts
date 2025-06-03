@@ -1,4 +1,5 @@
 import { RoleChangeRequestDto, SettingsUpdateRequestDto } from '@n8n/api-types';
+import { Logger } from '@n8n/backend-common';
 import type { PublicUser } from '@n8n/db';
 import {
 	Project,
@@ -7,6 +8,7 @@ import {
 	ProjectRepository,
 	SharedCredentialsRepository,
 	SharedWorkflowRepository,
+	UserRepository,
 } from '@n8n/db';
 import {
 	GlobalScope,
@@ -19,11 +21,9 @@ import {
 	Param,
 } from '@n8n/decorators';
 import { Response } from 'express';
-import { Logger } from 'n8n-core';
 
 import { AuthService } from '@/auth/auth.service';
 import { CredentialsService } from '@/credentials/credentials.service';
-import { UserRepository } from '@/databases/repositories/user.repository';
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';

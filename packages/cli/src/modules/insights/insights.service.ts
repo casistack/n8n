@@ -3,10 +3,9 @@ import {
 	type InsightsDateRange,
 	INSIGHTS_DATE_RANGE_KEYS,
 } from '@n8n/api-types';
-import { LicenseState } from '@n8n/backend-common';
+import { LicenseState, Logger } from '@n8n/backend-common';
 import { OnShutdown } from '@n8n/decorators';
 import { Service } from '@n8n/di';
-import { Logger } from 'n8n-core';
 import { UserError } from 'n8n-workflow';
 
 import type { PeriodUnit, TypeUnit } from './database/entities/insights-shared';
@@ -15,7 +14,6 @@ import { InsightsByPeriodRepository } from './database/repositories/insights-by-
 import { InsightsCollectionService } from './insights-collection.service';
 import { InsightsCompactionService } from './insights-compaction.service';
 import { InsightsPruningService } from './insights-pruning.service';
-import { InsightsConfig } from './insights.config';
 
 const keyRangeToDays: Record<InsightsDateRange['key'], number> = {
 	day: 1,
@@ -35,20 +33,15 @@ export class InsightsService {
 		private readonly collectionService: InsightsCollectionService,
 		private readonly pruningService: InsightsPruningService,
 		private readonly licenseState: LicenseState,
-		private readonly config: InsightsConfig,
 		private readonly logger: Logger,
 	) {
 		this.logger = this.logger.scoped('insights');
 	}
 
-	get isPruningEnabled() {
-		return this.config.maxAgeDays > -1;
-	}
-
 	startTimers() {
 		this.compactionService.startCompactionTimer();
 		this.collectionService.startFlushingTimer();
-		if (this.isPruningEnabled) {
+		if (this.pruningService.isPruningEnabled) {
 			this.pruningService.startPruningTimer();
 		}
 		this.logger.debug('Started compaction, flushing and pruning schedulers');
