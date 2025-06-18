@@ -1,6 +1,6 @@
 # First declare ARG for N8N_VERSION to use in FROM
 ARG N8N_VERSION=latest
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22.16.0
 
 # Start with Node.js Debian slim image as the base (already has Node.js and Python installed)
 FROM node:${NODE_VERSION}-bookworm-slim
