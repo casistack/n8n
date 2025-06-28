@@ -53,7 +53,7 @@ import CanvasBackground from './elements/background/CanvasBackground.vue';
 import CanvasArrowHeadMarker from './elements/edges/CanvasArrowHeadMarker.vue';
 import Edge from './elements/edges/CanvasEdge.vue';
 import Node from './elements/nodes/CanvasNode.vue';
-import { useViewportAutoAdjust } from '@/components/canvas/composables/useViewportAutoAdjust';
+import { useViewportAutoAdjust } from './composables/useViewportAutoAdjust';
 import { isOutsideSelected } from '@/utils/htmlUtils';
 
 const $style = useCssModule();
@@ -102,6 +102,7 @@ const emit = defineEmits<{
 	'create:workflow': [];
 	'drag-and-drop': [position: XYPosition, event: DragEvent];
 	'tidy-up': [CanvasLayoutEvent];
+	'toggle:focus-panel': [];
 	'viewport:change': [viewport: ViewportTransform, dimensions: Dimensions];
 	'selection:end': [position: XYPosition];
 	'open:sub-workflow': [nodeId: string];
@@ -315,6 +316,7 @@ const keyMap = computed(() => {
 		f2: emitWithLastSelectedNode((id) => emit('update:node:name', id)),
 		tab: () => emit('create:node', 'tab'),
 		shift_s: () => emit('create:sticky'),
+		shift_f: () => emit('toggle:focus-panel'),
 		ctrl_alt_n: () => emit('create:workflow'),
 		ctrl_enter: () => emit('run:workflow'),
 		ctrl_s: () => emit('save:workflow'),
