@@ -10,6 +10,7 @@ services:
         N8N_ENVIRONMENT: production
         NODE_ENV: production
         N8N_RELEASE_TYPE: stable
+        CACHE_BUST: '20250703'
     restart: always
     environment:
       DB_TYPE: postgresdb

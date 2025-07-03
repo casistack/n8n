@@ -67,6 +67,10 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 # Set working directory
 WORKDIR /home/node
 
+# Add cache busting argument to force npm install rebuild
+ARG CACHE_BUST
+ENV CACHE_BUST=$CACHE_BUST
+
 # Install n8n via npm - always fetch latest when using "latest"
 RUN npm config set update-notifier false && \
 	npm config set legacy-peer-deps true && \
@@ -80,7 +84,11 @@ RUN npm config set update-notifier false && \
 	else \
 	npm install -g n8n@${N8N_VERSION} --force; \
 	fi && \
-	cd /usr/local/lib/node_modules/n8n && npm install --production --force && npm rebuild sqlite3 && cd - && \
+	cd /usr/local/lib/node_modules/n8n && \
+	npm install ajv@^8.12.0 --save --force && \
+	npm install --production --force && \
+	npm rebuild sqlite3 && \
+	cd - && \
 	npm cache clean --force && \
 	echo "Installed n8n version: $(n8n --version) with Node.js $(node --version)"
 
