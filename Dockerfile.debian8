@@ -100,7 +100,9 @@ RUN chmod +x /docker-entrypoint-debian2.sh && \
 	# Set up required directories
 	mkdir -p /home/node/.n8n/storage && \
 	chmod 700 /home/node/.n8n/storage && \
-	chown -R node:node /home/node
+	chown -R node:node /home/node && \
+	# Create symlink for MCP client compatibility
+	ln -sf /usr/local/bin/npx /usr/bin/npx
 
 # Set environment variables for Node.js
 ENV NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
