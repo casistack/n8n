@@ -575,6 +575,7 @@ export const enum VIEWS {
 	WORKFLOW_HISTORY = 'WorkflowHistory',
 	WORKER_VIEW = 'WorkerView',
 	PROJECTS = 'Projects',
+	PROJECT_DETAILS = 'ProjectDetails',
 	PROJECTS_WORKFLOWS = 'ProjectsWorkflows',
 	PROJECTS_CREDENTIALS = 'ProjectsCredentials',
 	PROJECT_SETTINGS = 'ProjectSettings',
@@ -759,12 +760,6 @@ export const EXTRA_TEMPLATE_LINKS_EXPERIMENT = {
 	variant: 'variant',
 };
 
-export const FOCUS_PANEL_EXPERIMENT = {
-	name: 'focus_panel',
-	control: 'control',
-	variant: 'variant',
-};
-
 export const TEMPLATE_ONBOARDING_EXPERIMENT = {
 	name: '035_template_onboarding',
 	control: 'control',
@@ -772,11 +767,20 @@ export const TEMPLATE_ONBOARDING_EXPERIMENT = {
 	variantSuggestedTemplates: 'variant-suggested-templates',
 };
 
+export const BATCH_11AUG_EXPERIMENT = {
+	name: '37_onboarding_experiments_batch_aug11',
+	control: 'control',
+	variantReadyToRun: 'variant-ready-to-run-workflows',
+	variantStarterPack: 'variant-starter-pack-v2',
+};
+
 export const EXPERIMENTS_TO_TRACK = [
 	WORKFLOW_BUILDER_EXPERIMENT.name,
 	RAG_STARTER_WORKFLOW_EXPERIMENT.name,
 	EXTRA_TEMPLATE_LINKS_EXPERIMENT.name,
 	TEMPLATE_ONBOARDING_EXPERIMENT.name,
+	NDV_UI_OVERHAUL_EXPERIMENT.name,
+	BATCH_11AUG_EXPERIMENT.name,
 ];
 
 export const MFA_FORM = {
