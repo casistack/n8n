@@ -73,6 +73,8 @@ const props = withDefaults(
 		activeNode?: INodeUi;
 		isEmbeddedInCanvas?: boolean;
 		subTitle?: string;
+		extraTabsClassName?: string;
+		extraParameterWrapperClassName?: string;
 	}>(),
 	{
 		inputSize: 0,
@@ -94,6 +96,7 @@ const emit = defineEmits<{
 	activate: [];
 	execute: [];
 	captureWheelBody: [WheelEvent];
+	dblclickHeader: [MouseEvent];
 }>();
 
 const slots = defineSlots<{ actions?: {} }>();
@@ -135,9 +138,8 @@ const subConnections = ref<InstanceType<typeof NDVSubConnections> | null>(null);
 
 const installedPackage = ref<PublicInstalledPackage | undefined>(undefined);
 
-const currentWorkflowInstance = computed(() => workflowsStore.getCurrentWorkflow());
-const currentWorkflow = computed(() =>
-	workflowsStore.getWorkflowById(currentWorkflowInstance.value.id),
+const currentWorkflow = computed(
+	() => workflowsStore.getWorkflowById(workflowsStore.workflowObject.id), // @TODO check if we actually need workflowObject here
 );
 const hasForeignCredential = computed(() => props.foreignCredentials.length > 0);
 const isHomeProjectTeam = computed(
@@ -597,11 +599,13 @@ function handleSelectAction(params: INodeParameters) {
 			:node-type="nodeType"
 			:push-ref="pushRef"
 			:sub-title="subTitle"
+			:extra-tabs-class-name="extraTabsClassName"
 			:include-action="parametersByTab.action.length > 0"
 			:include-credential="isDisplayingCredentials"
 			:has-credential-issue="!areAllCredentialsSet"
 			@name-changed="nameChanged"
 			@tab-changed="onTabSelect"
+			@dblclick-title="emit('dblclickHeader', $event)"
 		>
 			<template #actions>
 				<slot name="actions" />
@@ -663,6 +667,7 @@ function handleSelectAction(params: INodeParameters) {
 				'node-parameters-wrapper',
 				shouldShowStaticScrollbar ? 'with-static-scrollbar' : '',
 				{ 'ndv-v2': isNDVV2 },
+				extraParameterWrapperClassName ?? '',
 			]"
 			data-test-id="node-parameters"
 			@wheel.capture="emit('captureWheelBody', $event)"
@@ -893,7 +898,7 @@ function handleSelectAction(params: INodeParameters) {
 
 	&.dragging {
 		border-color: var(--color-primary);
-		box-shadow: 0px 6px 16px rgba(255, 74, 51, 0.15);
+		box-shadow: 0 6px 16px rgba(255, 74, 51, 0.15);
 	}
 }
 
