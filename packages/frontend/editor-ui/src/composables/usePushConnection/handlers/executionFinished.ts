@@ -1,4 +1,4 @@
-import type { IExecutionResponse } from '@/Interface';
+import type { IExecutionResponse } from '@/features/execution/executions/executions.types';
 import { useExternalHooks } from '@/composables/useExternalHooks';
 import { useNodeHelpers } from '@/composables/useNodeHelpers';
 import { useRunWorkflow } from '@/composables/useRunWorkflow';
@@ -19,12 +19,12 @@ import {
 	SampleTemplates,
 	isPrebuiltAgentTemplateId,
 	isTutorialTemplateId,
-} from '@/features/templates/utils/workflowSamples';
+} from '@/features/workflows/templates/utils/workflowSamples';
 import {
 	clearPopupWindowState,
 	getExecutionErrorMessage,
 	getExecutionErrorToastConfiguration,
-} from '@/utils/executionUtils';
+} from '@/features/execution/executions/executions.utils';
 import { getTriggerNodeServiceName } from '@/utils/nodeTypesUtils';
 import type { ExecutionFinished } from '@n8n/api-types/push/execution';
 import { useI18n } from '@n8n/i18n';
@@ -33,18 +33,24 @@ import type { ExpressionError, IDataObject, IRunExecutionData, IWorkflowBase } f
 import { EVALUATION_TRIGGER_NODE_TYPE, TelemetryHelpers } from 'n8n-workflow';
 import type { useRouter } from 'vue-router';
 import { type WorkflowState } from '@/composables/useWorkflowState';
+import { useDocumentTitle } from '@/composables/useDocumentTitle';
 
 export type SimplifiedExecution = Pick<
 	IExecutionResponse,
 	'workflowId' | 'workflowData' | 'data' | 'status' | 'startedAt' | 'stoppedAt' | 'id'
 >;
 
+export type ExecutionFinishedOptions = {
+	router: ReturnType<typeof useRouter>;
+	workflowState: WorkflowState;
+};
+
 /**
  * Handles the 'executionFinished' event, which happens when a workflow execution is finished.
  */
 export async function executionFinished(
 	{ data }: ExecutionFinished,
-	options: { router: ReturnType<typeof useRouter>; workflowState: WorkflowState },
+	options: ExecutionFinishedOptions,
 ) {
 	const workflowsStore = useWorkflowsStore();
 	const uiStore = useUIStore();
@@ -52,7 +58,7 @@ export async function executionFinished(
 	const readyToRunWorkflowsStore = useReadyToRunWorkflowsStore();
 	const readyToRunWorkflowsV2Store = useReadyToRunWorkflowsV2Store();
 
-	workflowsStore.lastAddedExecutingNode = null;
+	options.workflowState.executingNode.lastAddedExecutingNode = null;
 
 	// No workflow is actively running, therefore we ignore this event
 	if (typeof workflowsStore.activeExecutionId === 'undefined') {
@@ -81,7 +87,9 @@ export async function executionFinished(
 			readyToRunWorkflowsStore.trackExecuteWorkflow(templateId.split('-').pop() ?? '', data.status);
 		} else if (
 			templateId === 'ready-to-run-ai-workflow-v1' ||
-			templateId === 'ready-to-run-ai-workflow-v2'
+			templateId === 'ready-to-run-ai-workflow-v2' ||
+			templateId === 'ready-to-run-ai-workflow-v3' ||
+			templateId === 'ready-to-run-ai-workflow-v4'
 		) {
 			if (data.status === 'success') {
 				readyToRunWorkflowsV2Store.trackExecuteAiWorkflowSuccess();
@@ -106,13 +114,19 @@ export async function executionFinished(
 	let successToastAlreadyShown = false;
 
 	if (data.status === 'success') {
-		handleExecutionFinishedWithOther(options.workflowState, successToastAlreadyShown);
+		handleExecutionFinishedWithSuccessOrOther(options.workflowState, successToastAlreadyShown);
 		successToastAlreadyShown = true;
 	}
 
 	const execution = await fetchExecutionData(data.executionId);
 
+	/**
+	 * This accounts for the case where the execution is not stored.
+	 * We clear the active execution id and set processing to false and return early.
+	 * Returning early presists existing run data up to this point.
+	 */
 	if (!execution) {
+		options.workflowState.setActiveExecutionId(undefined);
 		uiStore.setProcessingExecutionResults(false);
 		return;
 	}
@@ -125,12 +139,12 @@ export async function executionFinished(
 	} else if (execution.status === 'error' || execution.status === 'canceled') {
 		handleExecutionFinishedWithErrorOrCanceled(execution, runExecutionData);
 	} else {
-		handleExecutionFinishedWithOther(options.workflowState, successToastAlreadyShown);
+		handleExecutionFinishedWithSuccessOrOther(options.workflowState, successToastAlreadyShown);
 	}
 
 	setRunExecutionData(execution, runExecutionData, options.workflowState);
 
-	continueEvaluationLoop(execution, options.router);
+	continueEvaluationLoop(execution, options);
 }
 
 /**
@@ -140,7 +154,7 @@ export async function executionFinished(
  */
 export function continueEvaluationLoop(
 	execution: SimplifiedExecution,
-	router: ReturnType<typeof useRouter>,
+	opts: ExecutionFinishedOptions,
 ) {
 	if (execution.status !== 'success' || execution.data?.startData?.destinationNode !== undefined) {
 		return;
@@ -162,7 +176,7 @@ export function continueEvaluationLoop(
 	const rowsLeft = mainData ? (mainData[0]?.json?._rowsLeft as number) : 0;
 
 	if (rowsLeft && rowsLeft > 0) {
-		const { runWorkflow } = useRunWorkflow({ router });
+		const { runWorkflow } = useRunWorkflow(opts);
 		void runWorkflow({
 			triggerNode: evaluationTrigger.name,
 			// pass output of previous node run to trigger next run
@@ -244,7 +258,6 @@ export function handleExecutionFinishedWithWaitTill(options: {
 	const workflowsStore = useWorkflowsStore();
 	const settingsStore = useSettingsStore();
 	const workflowSaving = useWorkflowSaving(options);
-	const workflowHelpers = useWorkflowHelpers();
 	const workflowObject = workflowsStore.workflowObject;
 
 	const workflowSettings = workflowsStore.workflowSettings;
@@ -264,7 +277,7 @@ export function handleExecutionFinishedWithWaitTill(options: {
 	}
 
 	// Workflow did start but had been put to wait
-	workflowHelpers.setDocumentTitle(workflowObject.name as string, 'IDLE');
+	useDocumentTitle().setDocumentTitle(workflowObject.name as string, 'IDLE');
 }
 
 /**
@@ -278,10 +291,11 @@ export function handleExecutionFinishedWithErrorOrCanceled(
 	const i18n = useI18n();
 	const telemetry = useTelemetry();
 	const workflowsStore = useWorkflowsStore();
+	const documentTitle = useDocumentTitle();
 	const workflowHelpers = useWorkflowHelpers();
 	const workflowObject = workflowsStore.workflowObject;
 
-	workflowHelpers.setDocumentTitle(workflowObject.name as string, 'ERROR');
+	documentTitle.setDocumentTitle(workflowObject.name as string, 'ERROR');
 
 	if (
 		runExecutionData.resultData.error?.name === 'ExpressionError' &&
@@ -351,10 +365,9 @@ function handleExecutionFinishedSuccessfully(
 	message: string,
 	workflowState: WorkflowState,
 ) {
-	const workflowHelpers = useWorkflowHelpers();
 	const toast = useToast();
 
-	workflowHelpers.setDocumentTitle(workflowName, 'IDLE');
+	useDocumentTitle().setDocumentTitle(workflowName, 'IDLE');
 	workflowState.setActiveExecutionId(undefined);
 	toast.showMessage({
 		title: message,
@@ -365,19 +378,18 @@ function handleExecutionFinishedSuccessfully(
 /**
  * Handle the case when the workflow execution finished successfully.
  */
-export function handleExecutionFinishedWithOther(
+export function handleExecutionFinishedWithSuccessOrOther(
 	workflowState: WorkflowState,
 	successToastAlreadyShown: boolean,
 ) {
 	const workflowsStore = useWorkflowsStore();
 	const toast = useToast();
 	const i18n = useI18n();
-	const workflowHelpers = useWorkflowHelpers();
 	const nodeTypesStore = useNodeTypesStore();
 	const workflowObject = workflowsStore.workflowObject;
 	const workflowName = workflowObject.name ?? '';
 
-	workflowHelpers.setDocumentTitle(workflowName, 'IDLE');
+	useDocumentTitle().setDocumentTitle(workflowName, 'IDLE');
 
 	const workflowExecution = workflowsStore.getWorkflowExecution;
 	if (workflowExecution?.executedNode) {
@@ -422,11 +434,12 @@ export function setRunExecutionData(
 	workflowState: WorkflowState,
 ) {
 	const workflowsStore = useWorkflowsStore();
-	const nodeHelpers = useNodeHelpers();
+	const nodeHelpers = useNodeHelpers({ workflowState });
 	const runDataExecutedErrorMessage = getRunDataExecutedErrorMessage(execution);
 	const workflowExecution = workflowsStore.getWorkflowExecution;
 
-	workflowsStore.executingNode.length = 0;
+	// @TODO(ckolb): Should this call `clearNodeExecutionQueue` instead?
+	workflowState.executingNode.executingNode.length = 0;
 
 	if (workflowExecution === null) {
 		return;

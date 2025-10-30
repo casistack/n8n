@@ -76,19 +76,20 @@ function copy() {
 .copyText {
 	span {
 		font-family: Monaco, Consolas;
-		color: var(--color-text-base);
+		color: var(--color--text);
 		overflow-wrap: break-word;
 	}
 
-	padding: var(--spacing-xs);
-	background-color: var(--color-background-light);
-	border: var(--border-base);
-	border-radius: var(--border-radius-base);
+	padding: var(--spacing--xs);
+	background-color: var(--color--background--light-2);
+	border: var(--border);
+	border-radius: var(--radius);
 	cursor: pointer;
 	position: relative;
-	font-weight: var(--font-weight-regular);
+	font-weight: var(--font-weight--regular);
 
 	&:hover {
+		/* stylelint-disable-next-line @n8n/css-var-naming */
 		--display-copy-button: flex;
 		width: 100%;
 	}
@@ -100,14 +101,14 @@ function copy() {
 
 .large {
 	span {
-		font-size: var(--font-size-s);
+		font-size: var(--font-size--sm);
 		line-height: 1.5;
 	}
 }
 
 .medium {
 	span {
-		font-size: var(--font-size-xs);
+		font-size: var(--font-size--xs);
 		line-height: 1;
 	}
 }
@@ -118,15 +119,16 @@ function copy() {
 }
 
 .copyButton {
+	/* stylelint-disable-next-line @n8n/css-var-naming */
 	display: var(--display-copy-button, none);
 	position: absolute;
 	top: 0;
 	right: 0;
-	padding: var(--spacing-xs);
-	background-color: var(--color-background-light);
+	padding: var(--spacing--xs);
+	background-color: var(--color--background--light-2);
 	height: 100%;
 	align-items: center;
-	border-radius: var(--border-radius-base);
+	border-radius: var(--radius);
 
 	span {
 		font-family: unset;
@@ -134,10 +136,10 @@ function copy() {
 }
 
 .hint {
-	margin-top: var(--spacing-2xs);
-	font-size: var(--font-size-2xs);
-	line-height: var(--font-line-height-loose);
-	font-weight: var(--font-weight-regular);
+	margin-top: var(--spacing--2xs);
+	font-size: var(--font-size--2xs);
+	line-height: var(--line-height--lg);
+	font-weight: var(--font-weight--regular);
 	word-break: normal;
 }
 </style>

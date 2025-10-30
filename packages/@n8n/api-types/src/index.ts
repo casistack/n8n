@@ -6,6 +6,43 @@ export type * from './frontend-settings';
 export type * from './user';
 export type * from './api-keys';
 export type * from './community-node-types';
+export {
+	chatHubConversationModelSchema,
+	type ChatModelDto,
+	type ChatHubOpenAIModel,
+	type ChatHubAnthropicModel,
+	type ChatHubGoogleModel,
+	type ChatHubBaseLLMModel,
+	type ChatHubN8nModel,
+	type ChatHubCustomAgentModel,
+	type ChatHubConversationModel,
+	chatHubProviderSchema,
+	chatHubLLMProviderSchema,
+	type ChatHubProvider,
+	type ChatHubLLMProvider,
+	type ChatHubMessageType,
+	type ChatHubMessageStatus,
+	PROVIDER_CREDENTIAL_TYPE_MAP,
+	chatModelsRequestSchema,
+	emptyChatModelsResponse,
+	type ChatModelsRequest,
+	type ChatModelsResponse,
+	ChatHubSendMessageRequest,
+	ChatHubRegenerateMessageRequest,
+	ChatHubEditMessageRequest,
+	ChatHubUpdateConversationRequest,
+	type ChatMessageId,
+	type ChatSessionId,
+	type ChatHubMessageDto,
+	type ChatHubSessionDto,
+	type ChatHubConversationDto,
+	type ChatHubConversationResponse,
+	type ChatHubConversationsResponse,
+	type ChatHubAgentDto,
+	ChatHubCreateAgentRequest,
+	ChatHubUpdateAgentRequest,
+	type EnrichedStructuredChunk,
+} from './chat-hub';
 
 export type { Collaborator } from './push/collaboration';
 export type { HeartbeatMessage } from './push/heartbeat';

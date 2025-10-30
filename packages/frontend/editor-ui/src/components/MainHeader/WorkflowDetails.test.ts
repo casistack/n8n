@@ -6,8 +6,8 @@ import {
 	MODAL_CONFIRM,
 	VIEWS,
 	WORKFLOW_SHARE_MODAL_KEY,
-	PROJECT_MOVE_RESOURCE_MODAL,
 } from '@/constants';
+import { PROJECT_MOVE_RESOURCE_MODAL } from '@/features/collaboration/projects/projects.constants';
 import type { IWorkflowDb } from '@/Interface';
 import { STORES } from '@n8n/stores';
 import { createTestingPinia } from '@pinia/testing';
@@ -18,8 +18,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '@/composables/useMessage';
 import { useToast } from '@/composables/useToast';
 import { useWorkflowsStore } from '@/stores/workflows.store';
-import { useProjectsStore } from '@/stores/projects.store';
-import type { Project } from '@/types/projects.types';
+import { useProjectsStore } from '@/features/collaboration/projects/projects.store';
+import type { Project } from '@/features/collaboration/projects/projects.types';
 
 vi.mock('vue-router', async (importOriginal) => ({
 	// eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -209,6 +209,43 @@ describe('WorkflowDetails', () => {
 				},
 				query: { parentFolderId: '1' },
 			});
+		});
+
+		it('should not have workflow duplicate and import without update permission', async () => {
+			const { getByTestId, queryByTestId } = renderComponent({
+				props: {
+					...workflow,
+					readOnly: false,
+					isArchived: false,
+					scopes: ['workflow:read'],
+				},
+			});
+
+			await userEvent.click(getByTestId('workflow-menu'));
+
+			expect(queryByTestId('workflow-menu-item-duplicate')).not.toBeInTheDocument();
+			expect(queryByTestId('workflow-menu-item-import-from-url')).not.toBeInTheDocument();
+			expect(queryByTestId('workflow-menu-item-import-from-file')).not.toBeInTheDocument();
+		});
+
+		it('should have workflow duplicate and import options if permission update is true', async () => {
+			const { getByTestId, queryByTestId } = renderComponent({
+				props: {
+					...workflow,
+					readOnly: false,
+					isArchived: false,
+					scopes: ['workflow:update'],
+				},
+			});
+
+			await userEvent.click(getByTestId('workflow-menu'));
+
+			expect(getByTestId('workflow-menu-item-duplicate')).toBeInTheDocument();
+			expect(getByTestId('workflow-menu-item-import-from-url')).toBeInTheDocument();
+			expect(getByTestId('workflow-menu-item-import-from-file')).toBeInTheDocument();
+			expect(queryByTestId('workflow-menu-item-delete')).not.toBeInTheDocument();
+			expect(queryByTestId('workflow-menu-item-archive')).not.toBeInTheDocument();
+			expect(queryByTestId('workflow-menu-item-unarchive')).not.toBeInTheDocument();
 		});
 
 		it("should have disabled 'Archive' option on new workflow", async () => {

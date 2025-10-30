@@ -9,6 +9,7 @@ const APP_Z_INDEXES = {
 	NODE_CREATOR: 1700,
 	ASK_ASSISTANT_CHAT: 1750,
 	NDV: 1800,
+	COMMAND_BAR: 1900,
 	MODALS: 2000,
 	TOASTS: 2100,
 	ASK_ASSISTANT_FLOATING_BUTTON: 3000,
@@ -22,7 +23,7 @@ const APP_Z_INDEXES = {
 
 const setAppZIndexes = () => {
 	Object.keys(APP_Z_INDEXES).forEach((key) => {
-		const variableName = `--z-index-${key.toLowerCase().replaceAll('_', '-')}`;
+		const variableName = `--${key.toLowerCase().replaceAll('_', '-')}--z`;
 		const value = APP_Z_INDEXES[key as keyof typeof APP_Z_INDEXES];
 		document.documentElement.style.setProperty(variableName, `${value}`);
 	});
