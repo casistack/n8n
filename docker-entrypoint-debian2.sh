@@ -82,18 +82,18 @@ fi
 chown -R node:node /home/node/.n8n 2>/dev/null || true
 
 # Fix permissions for /data2 directory (for WhatsApp sessions and other data)
-# Only fix if not already owned by node to avoid corrupting existing sessions
 if [ -d "/data2" ]; then
+    # Check ownership and fix if necessary
     current_owner=$(stat -c '%U' /data2 2>/dev/null || echo "unknown")
     if [ "$current_owner" != "node" ]; then
-        echo "Fixing permissions for /data2 directory (currently owned by $current_owner)..."
+        echo "Fixing ownership of /data2 directory (currently owned by $current_owner)..."
         chown -R node:node /data2 2>/dev/null || echo "Warning: Could not change ownership of /data2 directory"
-        # Use 700 for session directory to satisfy Chrome's security requirements
-        chmod -R 700 /data2 2>/dev/null || echo "Warning: Could not fix permissions in /data2 directory"
-        echo "Permissions fixed for /data2 directory (700)"
-    else
-        echo "/data2 already owned by node, skipping permission fix"
     fi
+    
+    # Always enforce strict 700 permissions for Chrome security
+    # This ensures session data is persisted correctly
+    echo "Enforcing secure permissions (700) on /data2..."
+    chmod -R 700 /data2 2>/dev/null || echo "Warning: Could not fix permissions in /data2 directory"
 fi
 
 # Execute the main command as the node user (drop privileges)
