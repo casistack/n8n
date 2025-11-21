@@ -81,5 +81,13 @@ fi
 # Ensure the node user owns their home directory
 chown -R node:node /home/node/.n8n 2>/dev/null || true
 
+# Fix permissions for /data2 directory (for WhatsApp sessions and other data)
+if [ -d "/data2" ]; then
+    echo "Fixing permissions for /data2 directory..."
+    chown -R node:node /data2 2>/dev/null || echo "Warning: Could not change ownership of /data2 directory"
+    chmod -R 755 /data2 2>/dev/null || echo "Warning: Could not fix permissions in /data2 directory"
+    echo "Permissions fixed for /data2 directory"
+fi
+
 # Execute the main command as the node user (drop privileges)
 exec gosu node "$@"
