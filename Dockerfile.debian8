@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 	ffmpeg \
 	tini \
 	curl \
+	su-exec \
 	chromium \
 	libgtk-3-0 \
     libgbm-dev \
@@ -120,8 +121,8 @@ EXPOSE 5678
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 	CMD curl -f http://localhost:5678/healthz || exit 1
 
-# Switch to non-root user
-USER node
+# Note: We don't switch to USER node here because the entrypoint needs root
+# privileges to fix volume mount permissions. The entrypoint will drop privileges.
 
 ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
 CMD ["n8n", "start"]

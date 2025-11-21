@@ -70,16 +70,16 @@ rm -f /data2/session-session/SingletonSocket
 rm -f /data2/session-session/DevToolsActivePort
 echo "Chrome lock files cleaned up"
 
-# Fix permissions for custom nodes directory
+# Fix permissions for custom nodes directory (running as root)
 if [ -d "/home/node/.n8n/nodes" ]; then
     echo "Fixing permissions for custom nodes directory..."
-    # Only attempt to fix if we have write access to the parent directory
-    if [ -w "/home/node/.n8n" ]; then
-        chmod -R u+rwX /home/node/.n8n/nodes 2>/dev/null || echo "Warning: Could not fix all permissions in nodes directory"
-    else
-        echo "Warning: No write access to /home/node/.n8n - skipping permission fix"
-    fi
+    chown -R node:node /home/node/.n8n/nodes 2>/dev/null || echo "Warning: Could not change ownership of nodes directory"
+    chmod -R 755 /home/node/.n8n/nodes 2>/dev/null || echo "Warning: Could not fix permissions in nodes directory"
+    echo "Permissions fixed for custom nodes directory"
 fi
 
-# Execute the main command
-exec "$@"
+# Ensure the node user owns their home directory
+chown -R node:node /home/node/.n8n 2>/dev/null || true
+
+# Execute the main command as the node user (drop privileges)
+exec su-exec node "$@"
