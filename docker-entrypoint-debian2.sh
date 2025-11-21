@@ -82,4 +82,4 @@ fi
 chown -R node:node /home/node/.n8n 2>/dev/null || true
 
 # Execute the main command as the node user (drop privileges)
-exec su-exec node "$@"
+exec gosu node "$@"

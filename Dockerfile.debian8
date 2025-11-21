@@ -36,7 +36,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 	ffmpeg \
 	tini \
 	curl \
-	su-exec \
+	gosu \
 	chromium \
 	libgtk-3-0 \
     libgbm-dev \
