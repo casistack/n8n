@@ -88,8 +88,9 @@ if [ -d "/data2" ]; then
     if [ "$current_owner" != "node" ]; then
         echo "Fixing permissions for /data2 directory (currently owned by $current_owner)..."
         chown -R node:node /data2 2>/dev/null || echo "Warning: Could not change ownership of /data2 directory"
-        chmod -R 755 /data2 2>/dev/null || echo "Warning: Could not fix permissions in /data2 directory"
-        echo "Permissions fixed for /data2 directory"
+        # Use 700 for session directory to satisfy Chrome's security requirements
+        chmod -R 700 /data2 2>/dev/null || echo "Warning: Could not fix permissions in /data2 directory"
+        echo "Permissions fixed for /data2 directory (700)"
     else
         echo "/data2 already owned by node, skipping permission fix"
     fi
