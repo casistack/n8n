@@ -10,7 +10,7 @@ services:
         N8N_ENVIRONMENT: production
         NODE_ENV: production
         N8N_RELEASE_TYPE: stable
-        CACHE_BUST: '20251121d'
+        CACHE_BUST: "20251121d"
     restart: always
     environment:
       DB_TYPE: postgresdb
@@ -99,3 +99,5 @@ services:
 volumes:
   n8n_data_annex:
   postgres_data_n8n_annex:
+    external: true
+    name: esssskw4kg44ck8k0k8cwgg4-postgres_data_n8n_annex
