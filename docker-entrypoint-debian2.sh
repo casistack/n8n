@@ -82,11 +82,17 @@ fi
 chown -R node:node /home/node/.n8n 2>/dev/null || true
 
 # Fix permissions for /data2 directory (for WhatsApp sessions and other data)
+# Only fix if not already owned by node to avoid corrupting existing sessions
 if [ -d "/data2" ]; then
-    echo "Fixing permissions for /data2 directory..."
-    chown -R node:node /data2 2>/dev/null || echo "Warning: Could not change ownership of /data2 directory"
-    chmod -R 755 /data2 2>/dev/null || echo "Warning: Could not fix permissions in /data2 directory"
-    echo "Permissions fixed for /data2 directory"
+    current_owner=$(stat -c '%U' /data2 2>/dev/null || echo "unknown")
+    if [ "$current_owner" != "node" ]; then
+        echo "Fixing permissions for /data2 directory (currently owned by $current_owner)..."
+        chown -R node:node /data2 2>/dev/null || echo "Warning: Could not change ownership of /data2 directory"
+        chmod -R 755 /data2 2>/dev/null || echo "Warning: Could not fix permissions in /data2 directory"
+        echo "Permissions fixed for /data2 directory"
+    else
+        echo "/data2 already owned by node, skipping permission fix"
+    fi
 fi
 
 # Execute the main command as the node user (drop privileges)
