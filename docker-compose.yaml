@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 services:
   n8n:
     build:
@@ -10,7 +10,7 @@ services:
         N8N_ENVIRONMENT: production
         NODE_ENV: production
         N8N_RELEASE_TYPE: stable
-        CACHE_BUST: '20251121'
+        CACHE_BUST: "20251121"
     restart: always
     environment:
       DB_TYPE: postgresdb
@@ -70,7 +70,7 @@ services:
       N8N_PROXY_HOPS: ${N8N_PROXY_HOPS:-0}
 
     ports:
-      - ':5678'
+      - ":5678"
     volumes:
       - n8n_data_annex:/data2
       - ./n8n/nodes:/home/node/.n8n/nodes
@@ -88,8 +88,8 @@ services:
       POSTGRES_USER: ${DB_POSTGRESDB_USER:-n8n}
       POSTGRES_PASSWORD: ${DB_POSTGRESDB_PASSWORD}
     ports:
-      - '5433:5432'
-      - '12000:10000'
+      - "5433:5432"
+      - "12000:10000"
     volumes:
       - postgres_data_n8n_annex:/var/lib/postgresql/data
     deploy:
