@@ -13,6 +13,10 @@ import {
 	type IWorkflowBase,
 	type WorkflowExecuteMode,
 } from '../src/interfaces';
+import {
+	createEmptyRunExecutionData,
+	createRunExecutionData,
+} from '../src/run-execution-data-factory';
 import { Workflow } from '../src/workflow';
 import { WorkflowDataProxy } from '../src/workflow-data-proxy';
 
@@ -346,8 +350,9 @@ describe('WorkflowDataProxy', () => {
 			} catch (error) {
 				expect(error).toBeInstanceOf(ExpressionError);
 				const exprError = error as ExpressionError;
-				expect(exprError.message).toEqual("Can't get data for expression");
-				expect(exprError.context.type).toEqual('paired_item_invalid_info');
+				expect(exprError.message).toContain('Paired item data for item from node');
+				expect(exprError.message).toContain('Edit Fields');
+				expect(exprError.context.type).toEqual('paired_item_no_info');
 			}
 		});
 	});
@@ -671,6 +676,54 @@ describe('WorkflowDataProxy', () => {
 			// Should return existing values for keys that are present
 			expect(proxy.$fromAI('regular_field')).toEqual('regular_value');
 		});
+
+		test('Throws ExpressionError when there is no execution data', () => {
+			// Create a workflow with no data at all
+			const workflowWithNoData: IWorkflowBase = {
+				id: '123',
+				name: 'test workflow',
+				nodes: [
+					{
+						id: 'aiNode',
+						name: 'AI Node',
+						type: 'n8n-nodes-base.aiAgent',
+						typeVersion: 1,
+						position: [0, 0],
+						parameters: {},
+					},
+				],
+				connections: {},
+				active: false,
+				activeVersionId: null,
+				isArchived: false,
+				createdAt: new Date(),
+				updatedAt: new Date(),
+			};
+
+			const dataProxy = new WorkflowDataProxy(
+				new Workflow({
+					id: '123',
+					name: 'test workflow',
+					nodes: workflowWithNoData.nodes,
+					connections: workflowWithNoData.connections,
+					active: false,
+					nodeTypes: Helpers.NodeTypes(),
+				}),
+				null, // No run execution data
+				0,
+				0,
+				'AI Node',
+				[], // Empty connectionInputData - this triggers the bug
+				{},
+				'manual',
+				{},
+				undefined,
+			);
+
+			const proxy = dataProxy.getDataProxy();
+
+			expect(() => proxy.$fromAI('some_key')).toThrow(ExpressionError);
+		});
 	});
 
 	describe('$rawParameter', () => {
@@ -695,7 +748,7 @@ describe('WorkflowDataProxy', () => {
 			const noRunDataProxy = getProxyFromFixture(
 				fixture.workflow,
 				{
-					data: { resultData: { runData: {} } },
+					data: createEmptyRunExecutionData(),
 					mode: 'manual',
 					startedAt: new Date(),
 					status: 'success',
@@ -1023,11 +1076,7 @@ describe('WorkflowDataProxy', () => {
 
 			// Create run data without execution data for Telegram Trigger
 			const run = {
-				data: {
-					resultData: {
-						runData: {}, // Empty - no nodes have executed
-					},
-				},
+				data: createEmptyRunExecutionData(),
 				mode: 'manual' as const,
 				startedAt: new Date(),
 				status: 'success' as const,
@@ -1089,11 +1138,7 @@ describe('WorkflowDataProxy', () => {
 			};
 
 			const run = {
-				data: {
-					resultData: {
-						runData: {}, // Empty - no nodes have executed
-					},
-				},
+				data: createEmptyRunExecutionData(),
 				mode: 'manual' as const,
 				startedAt: new Date(),
 				status: 'success' as const,
@@ -1151,11 +1196,7 @@ describe('WorkflowDataProxy', () => {
 			};
 
 			const run = {
-				data: {
-					resultData: {
-						runData: {}, // Empty - no nodes have executed
-					},
-				},
+				data: createEmptyRunExecutionData(),
 				mode: 'manual' as const,
 				startedAt: new Date(),
 				status: 'success' as const,
@@ -1226,7 +1267,7 @@ describe('WorkflowDataProxy', () => {
 			};
 
 			const run = {
-				data: {
+				data: createRunExecutionData({
 					resultData: {
 						runData: {
 							'Real Node': [
@@ -1242,7 +1283,7 @@ describe('WorkflowDataProxy', () => {
 							],
 						},
 					},
-				},
+				}),
 				mode: 'manual' as const,
 				startedAt: new Date(),
 				status: 'success' as const,

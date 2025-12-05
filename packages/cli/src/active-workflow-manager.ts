@@ -40,6 +40,7 @@ import {
 	WebhookPathTakenError,
 	UnexpectedError,
 	ensureError,
+	createRunExecutionData,
 } from 'n8n-workflow';
 import { strict } from 'node:assert';
 
@@ -51,6 +52,7 @@ import { ExternalHooks } from '@/external-hooks';
 import { NodeTypes } from '@/node-types';
 import { Push } from '@/push';
 import { Publisher } from '@/scaling/pubsub/publisher.service';
+import { PubSubCommandMap } from '@/scaling/pubsub/pubsub.event-map';
 import { ActiveWorkflowsService } from '@/services/active-workflows.service';
 import * as WebhookHelpers from '@/webhooks/webhook-helpers';
 import { WebhookService } from '@/webhooks/webhook.service';
@@ -134,21 +136,6 @@ export class ActiveWorkflowManager {
 	 */
 	allActiveInMemory() {
 		return this.activeWorkflows.allActiveWorkflows();
-	}
-
-	/**
-	 * Returns if the workflow is stored as `active`.
-	 *
-	 * @important Do not confuse with `ActiveWorkflows.isActive()`,
-	 * which checks if the workflow is active in memory.
-	 */
-	async isActive(workflowId: WorkflowId) {
-		const workflow = await this.workflowRepository.findOne({
-			select: ['activeVersionId'],
-			where: { id: workflowId },
-		});
-
-		return !!workflow?.activeVersionId;
 	}
 
 	/**
@@ -414,12 +401,12 @@ export class ActiveWorkflowManager {
 		mode: WorkflowExecuteMode,
 	) {
 		const fullRunData: IRun = {
-			data: {
+			data: createRunExecutionData({
 				resultData: {
 					error,
 					runData: {},
 				},
-			},
+			}),
 			finished: false,
 			mode,
 			startedAt: new Date(),
@@ -669,7 +656,7 @@ export class ActiveWorkflowManager {
 	}
 
 	@OnPubSubEvent('display-workflow-activation', { instanceType: 'main' })
-	handleDisplayWorkflowActivation({ workflowId }: { workflowId: string }) {
+	handleDisplayWorkflowActivation({ workflowId }: PubSubCommandMap['display-workflow-activation']) {
 		this.push.broadcast({ type: 'workflowActivated', data: { workflowId } });
 	}
 
@@ -696,7 +683,9 @@ export class ActiveWorkflowManager {
 		instanceType: 'main',
 		instanceRole: 'leader',
 	})
-	async handleAddWebhooksTriggersAndPollers({ workflowId }: { workflowId: string }) {
+	async handleAddWebhooksTriggersAndPollers({
+		workflowId,
+	}: PubSubCommandMap['add-webhooks-triggers-and-pollers']) {
 		try {
 			await this.add(workflowId, 'activate', undefined, {
 				shouldPublish: false, // prevent leader from re-publishing message
@@ -920,7 +909,9 @@ export class ActiveWorkflowManager {
 	}
 
 	@OnPubSubEvent('remove-triggers-and-pollers', { instanceType: 'main', instanceRole: 'leader' })
-	async handleRemoveTriggersAndPollers({ workflowId }: { workflowId: string }) {
+	async handleRemoveTriggersAndPollers({
+		workflowId,
+	}: PubSubCommandMap['remove-triggers-and-pollers']) {
 		await this.removeActivationError(workflowId);
 		await this.removeWorkflowTriggersAndPollers(workflowId);
 
