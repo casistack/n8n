@@ -62,6 +62,7 @@ export function createErrorResult(testCase: TestCase, error: unknown): TestResul
 			agentPrompt: { violations: [], score: 0 },
 			tools: { violations: [], score: 0 },
 			fromAi: { violations: [], score: 0 },
+			credentials: { violations: [], score: 0 },
 			similarity: null,
 		},
 		generationTime: 0,
@@ -99,7 +100,15 @@ export async function runSingleTest(
 		// Generate workflow
 		const startTime = Date.now();
 		await consumeGenerator(
-			agent.chat(getChatPayload(testCase.prompt, testCase.id, opts?.featureFlags), userId),
+			agent.chat(
+				getChatPayload({
+					evalType: 'single-eval',
+					message: testCase.prompt,
+					workflowId: testCase.id,
+					featureFlags: opts?.featureFlags,
+				}),
+				userId,
+			),
 		);
 		const generationTime = Date.now() - startTime;
 
