@@ -6,11 +6,11 @@ services:
       dockerfile: Dockerfile.debian8
       args:
         N8N_VERSION: latest
-        NODE_VERSION: ${NODE_VERSION:-20}
+        NODE_VERSION: ${NODE_VERSION:-22.16.0}
         N8N_ENVIRONMENT: production
         NODE_ENV: production
         N8N_RELEASE_TYPE: stable
-        CACHE_BUST: '20251121d'
+        CACHE_BUST: '20251223a'
     restart: always
     environment:
       DB_TYPE: postgresdb
@@ -68,6 +68,13 @@ services:
       N8N_WHATSAPP_QR_TIMEOUT: ${N8N_WHATSAPP_QR_TIMEOUT:-300000}
       N8N_WHATSAPP_INIT_TIMEOUT: ${N8N_WHATSAPP_INIT_TIMEOUT:-600000}
       N8N_PROXY_HOPS: ${N8N_PROXY_HOPS:-0}
+      # ========== n8n 2.0 Compatibility Settings ==========
+      # File access restricted by default - override in env to allow specific paths (semicolon-separated)
+      N8N_RESTRICT_FILE_ACCESS_TO: ${N8N_RESTRICT_FILE_ACCESS_TO}
+      # ExecuteCommand and LocalFileTrigger disabled by default (n8n 2.0 security) - set NODES_EXCLUDE=[] to enable
+      NODES_EXCLUDE: ${NODES_EXCLUDE:-n8n-nodes-base.executeCommand,n8n-nodes-base.localFileTrigger}
+      # Env var access in Code nodes blocked by default (n8n 2.0 security) - set to false to allow
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: ${N8N_BLOCK_ENV_ACCESS_IN_NODE:-true}
 
     ports:
       - ":5678"
