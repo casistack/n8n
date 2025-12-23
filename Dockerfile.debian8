@@ -41,14 +41,16 @@ RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recomm
 	build-essential \
 	&& rm -rf /var/lib/apt/lists/*
 
-# Install chromium and deps in separate layer (large package - benefits from caching)
-RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -y \
+# Install chromium and deps in separate layer (large package - with retry logic for resilience)
+RUN for i in 1 2 3; do \
+	apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -o Dpkg::Options::="--force-confold" -y \
 	chromium \
 	libgtk-3-0 \
 	libgbm-dev \
 	libnss3 \
 	libxss1 \
 	xvfb \
+	&& break || { echo "Attempt $i failed, retrying in 5s..."; sleep 5; }; done \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Install media packages (separate layer for better caching)
