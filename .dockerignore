@@ -25,3 +25,9 @@
 !docker/images/n8n/docker-entrypoint.sh
 !docker/images/runners
 !docker/images/runners/n8n-task-runners.json
+
+# === Custom Debian build files ===
+!Dockerfile.debian8
+!docker-entrypoint-debian2.sh
+!docker-entrypoint.sh
+!docker-entrypoint-alpine.sh
