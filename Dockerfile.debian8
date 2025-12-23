@@ -8,7 +8,7 @@ FROM node:${NODE_VERSION}-bookworm-slim
 # Redeclare ARG after FROM
 ARG N8N_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
-ARG DEBIAN_MIRROR=deb.debian.org
+ARG DEBIAN_MIRROR=ftp.uk.debian.org
 ARG SKIP_NONESSENTIAL_PACKAGES=true
 ARG N8N_RELEASE_TYPE=stable
 
@@ -28,40 +28,43 @@ ENV NODE_ENV=production \
 
 # Speed up apt by using a faster mirror if specified
 RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
-	sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list; \
+	sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list 2>/dev/null || true; \
 	fi
 
-# Install required packages (Node.js and npm already included in base image)
-RUN apt-get update && apt-get install --no-install-recommends -y \
-	ffmpeg \
+# Install base packages first (smaller, faster - cached separately)
+RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -y \
 	tini \
 	curl \
 	gosu \
-	chromium \
 	python3 \
 	python3-pip \
 	build-essential \
+	&& rm -rf /var/lib/apt/lists/*
+
+# Install chromium and deps in separate layer (large package - benefits from caching)
+RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -y \
+	chromium \
 	libgtk-3-0 \
-    libgbm-dev \
-    libnss3 \
-    libxss1 \
-    xvfb \
+	libgbm-dev \
+	libnss3 \
+	libxss1 \
+	xvfb \
+	&& rm -rf /var/lib/apt/lists/*
+
+# Install media packages (separate layer for better caching)
+RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -y \
+	ffmpeg \
 	&& mkdir -p /home/node/.n8n \
 	&& if [ "$SKIP_NONESSENTIAL_PACKAGES" = "false" ]; then \
-	apt-get install --no-install-recommends -y \
+	apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -y \
 	iputils-ping \
 	nano \
 	libgtk2.0-0 \
-	libgtk-3-0 \
-	libgbm-dev \
 	libnotify-dev \
 	libgconf-2-4 \
-	libnss3 \
-	libxss1 \
 	libasound2 \
 	libxtst6 \
 	xauth \
-	xvfb \
 	graphicsmagick; \
 	fi \
 	&& apt-get clean autoclean \
