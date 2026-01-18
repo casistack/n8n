@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue';
+import { useDebounceFn } from '@vueuse/core';
 
 import get from 'lodash/get';
 
@@ -227,6 +228,8 @@ const dateTimePickerOptions = ref({
 	],
 });
 const isFocused = ref(false);
+// Track when we're switching modes to prevent spurious focus events
+const isSwitchingMode = ref(false);
 
 const contextNode = expressionLocalResolveCtx?.value?.workflow.getNode(
 	expressionLocalResolveCtx.value.nodeName,
@@ -822,15 +825,17 @@ function selectInput() {
 	}
 }
 
-function trackBuilderPlaceholders() {
+const trackBuilderPlaceholders = useDebounceFn(() => {
 	if (node.value && isPlaceholderValue(props.modelValue) && builderStore.isAIBuilderEnabled) {
 		builderStore.trackWorkflowBuilderJourney('field_focus_placeholder_in_ndv', {
 			node_type: node.value.type,
 		});
 	}
-}
+}, 100);
 
-async function setFocus() {
+async function setFocus(fromModeSwitch: boolean | FocusEvent = false) {
+	// When called from template @focus="setFocus", the first arg is a FocusEvent, not a boolean
+	const isFromModeSwitch = fromModeSwitch === true;
 	if (['json'].includes(props.parameter.type) && getTypeOption('alwaysOpenEditWindow')) {
 		displayEditDialog();
 		return;
@@ -846,6 +851,19 @@ async function setFocus() {
 		nodeName.value = node.value.name;
 	}
 
+	// Skip if we're in the middle of a mode switch and this is not the mode switch call itself
+	// This prevents spurious focus events from the unmounting expression editor
+	if (isSwitchingMode.value && !isFromModeSwitch) {
+		return;
+	}
+
+	// Skip if already focused to avoid re-triggering focus events
+	// This prevents the options menu from staying visible after mode switches
+	// But allow mode switch calls through, as they need to refocus the new input element
+	if (isFocused.value && !isFromModeSwitch) {
+		return;
+	}
+
 	await nextTick();
 
 	if (inputField.value) {
@@ -859,7 +877,7 @@ async function setFocus() {
 	}
 
 	emit('focus');
-	trackBuilderPlaceholders();
+	void trackBuilderPlaceholders();
 }
 
 function rgbaToHex(value: string): string | null {
@@ -932,11 +950,7 @@ function valueChanged(untypedValue: unknown) {
 
 	const isSpecializedEditor = props.parameter.typeOptions?.editor !== undefined;
 
-	if (
-		!oldValue &&
-		oldValue !== undefined &&
-		shouldConvertToExpression(value, isSpecializedEditor)
-	) {
+	if (!oldValue && shouldConvertToExpression(value, isSpecializedEditor)) {
 		// if empty old value and updated value has an expression, add '=' prefix to switch to expression mode
 		value = '=' + value;
 	}
@@ -1060,7 +1074,10 @@ async function optionSelected(command: string) {
 			break;
 
 		case 'removeExpression':
-			isFocused.value = false;
+			// Set flag to prevent spurious focus events from the unmounting expression editor
+			// Keep the flag active for a short time after setFocus completes because
+			// the spurious events can arrive asynchronously
+			isSwitchingMode.value = true;
 			valueChanged(
 				parseFromExpression(
 					props.modelValue,
@@ -1070,6 +1087,14 @@ async function optionSelected(command: string) {
 					parameterOptions.value,
 				),
 			);
+			// Don't focus boolean switches - they don't integrate properly with our focus tracking
+			// and focusing them causes the options to stay visible
+			if (props.parameter.type !== 'boolean') {
+				await setFocus(true);
+			}
+			setTimeout(() => {
+				isSwitchingMode.value = false;
+			}, 100);
 			break;
 
 		case 'refreshOptions':
@@ -1220,7 +1245,7 @@ watch(remoteParameterOptionsLoading, () => {
 watch(isModelValueExpression, async (isExpression, wasExpression) => {
 	if (!props.isReadOnly && isFocused.value && isExpression !== wasExpression) {
 		await nextTick();
-		await setFocus();
+		await setFocus(true);
 	}
 });
 
@@ -1910,14 +1935,16 @@ onUpdated(async () => {
 }
 
 .droppable {
-	--input--border-color: var(--ndv--droppable-parameter--color);
-	--input--border-right-color: var(--ndv--droppable-parameter--color);
-	--input--border-style: dashed;
+	--input--border-color: transparent;
+	--input--border-right-color: transparent;
 
 	textarea,
 	input,
 	.cm-editor {
-		border-width: 1.5px;
+		border-color: transparent;
+		outline: 1.5px dashed var(--ndv--droppable-parameter--color);
+		outline-offset: -1.5px;
+		transition: none;
 	}
 }
 
@@ -1928,9 +1955,13 @@ onUpdated(async () => {
 	--input--border-style: solid;
 
 	textarea,
-	input {
+	input,
+	.cm-editor {
 		cursor: grabbing !important;
+		border-color: var(--color--success);
 		border-width: 1px;
+		outline: none;
+		transition: none;
 	}
 }
 

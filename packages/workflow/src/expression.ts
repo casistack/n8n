@@ -66,6 +66,7 @@ setErrorHandler((error: Error) => {
 const createSafeObject = (): typeof Object => {
 	const safeCreate = (proto: object | null): object => {
 		// Only allow single-argument create (no property descriptors)
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 		return Object.create(proto);
 	};
 
@@ -97,6 +98,7 @@ const createSafeObject = (): typeof Object => {
 				return safeCreate;
 			}
 
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 			return Reflect.get(target, prop, receiver);
 		},
 		// Block defineProperty trap to prevent __defineGetter__ from working
@@ -139,6 +141,7 @@ const createSafeError = (): typeof Error => {
 				return undefined;
 			}
 
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 			return Reflect.get(target, prop, receiver);
 		},
 		set() {
@@ -220,6 +223,11 @@ export class Expression {
 		// Prevent Reflection
 		data.Reflect = {};
 		data.Proxy = {};
+
+		data.__lookupGetter__ = undefined;
+		data.__lookupSetter__ = undefined;
+		data.__defineGetter__ = undefined;
+		data.__defineSetter__ = undefined;
 
 		// Deprecated
 		data.escape = {};
@@ -423,7 +431,11 @@ export class Expression {
 		data.extend = extend;
 		data.extendOptional = extendOptional;
 
-		data[sanitizerName] = sanitizer;
+		Object.defineProperty(data, sanitizerName, {
+			value: sanitizer,
+			writable: false,
+			configurable: false,
+		});
 
 		Object.assign(data, extendedFunctions);
 
