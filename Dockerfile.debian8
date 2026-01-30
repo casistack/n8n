@@ -34,6 +34,7 @@ RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
 # Install base packages first (smaller, faster - cached separately)
 RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -y \
 	tini \
+  git \
 	curl \
 	gosu \
 	python3 \
