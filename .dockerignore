@@ -31,3 +31,16 @@
 !docker-entrypoint-debian2.sh
 !docker-entrypoint.sh
 !docker-entrypoint-alpine.sh
+
+# === benchmark image (packages/@n8n/benchmark/Dockerfile) ===
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!patches
+!patches/**
+!scripts
+!scripts/**
+!packages/@n8n/benchmark
+!packages/@n8n/benchmark/**
+!packages/@n8n/typescript-config
+!packages/@n8n/typescript-config/**
