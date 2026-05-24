@@ -1,5 +1,7 @@
-# First declare ARG for N8N_VERSION to use in FROM
-ARG N8N_VERSION=latest
+# First declare ARG for N8N_VERSION to use in FROM.
+# Keep this pinned. Coolify rebuilds should not silently pull a different n8n
+# package when npm's `latest` dist-tag moves.
+ARG N8N_VERSION=2.20.7-exp.0
 ARG NODE_VERSION=22.16.0
 
 # Start with Node.js Debian slim image as the base (already has Node.js and Python installed)
@@ -81,7 +83,9 @@ WORKDIR /home/node
 ARG CACHE_BUST
 ENV CACHE_BUST=$CACHE_BUST
 
-# Install n8n via npm - always fetch latest when using "latest"
+# Install n8n via npm. Do not use mutable dist-tags such as `latest`; a Coolify
+# rebuild after an upstream merge would otherwise deploy a different n8n package
+# than the one that was previously tested.
 RUN npm config set update-notifier false && \
 	npm config set legacy-peer-deps true && \
 	npm config set fetch-retries 5 && \
@@ -89,16 +93,18 @@ RUN npm config set update-notifier false && \
 	npm config set fetch-retry-maxtimeout 120000 && \
 	npm config set loglevel error && \
 	npm config set fetch-timeout 600000 && \
-	if [ "$N8N_VERSION" = "latest" ]; then \
-	npm cache clean --force && npm install -g n8n --force; \
-	else \
-	npm install -g n8n@${N8N_VERSION} --force; \
-	fi && \
-	cd /usr/local/lib/node_modules/n8n && \
-	npm install ajv@^8.12.0 --save --force && \
-	npm install --production --force && \
+	case "$N8N_VERSION" in \
+		latest|stable|next|beta|rc|snapshot|'') \
+			echo "N8N_VERSION must be pinned to an exact version, got '$N8N_VERSION'"; \
+			exit 1; \
+			;; \
+	esac && \
+	npm cache clean --force && \
+	npm install -g n8n@${N8N_VERSION} --omit=dev --force && \
 	npm rebuild sqlite3 && \
-	cd - && \
+	N8N_ENCRYPTION_KEY=build-smoke-test n8n --help > /tmp/n8n-help.txt && \
+	grep -q "start:" /tmp/n8n-help.txt && \
+	rm -f /tmp/n8n-help.txt && \
 	npm cache clean --force && \
 	echo "Installed n8n version: $(n8n --version) with Node.js $(node --version)"
 
