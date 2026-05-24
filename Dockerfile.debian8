@@ -26,6 +26,7 @@ COPY . .
 
 RUN corepack enable && \
 	pnpm --version && \
+	pnpm install --frozen-lockfile && \
 	node scripts/build-n8n.mjs
 
 FROM node:${NODE_VERSION}-bookworm-slim
