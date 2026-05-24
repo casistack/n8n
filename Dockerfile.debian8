@@ -1,22 +1,41 @@
-# First declare ARG for N8N_VERSION to use in FROM.
-# Keep this pinned. Coolify rebuilds should not silently pull a different n8n
-# package when npm's `latest` dist-tag moves.
-ARG N8N_VERSION=2.20.7-exp.0
-ARG NODE_VERSION=22.16.0
+ARG NODE_VERSION=24.15.0
 
-# Start with Node.js Debian slim image as the base (already has Node.js and Python installed)
+FROM node:${NODE_VERSION}-bookworm-slim AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG DEBIAN_MIRROR=ftp.uk.debian.org
+
+ENV CI=true \
+	COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+	DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /build
+
+RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
+	sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list 2>/dev/null || true; \
+	fi
+
+RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -y \
+	git \
+	python3 \
+	build-essential \
+	ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
+COPY . .
+
+RUN corepack enable && \
+	pnpm --version && \
+	node scripts/build-n8n.mjs
+
 FROM node:${NODE_VERSION}-bookworm-slim
 
-# Redeclare ARG after FROM
-ARG N8N_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
 ARG DEBIAN_MIRROR=ftp.uk.debian.org
 ARG SKIP_NONESSENTIAL_PACKAGES=true
 ARG N8N_RELEASE_TYPE=stable
 
-# Set environment variables - consolidated to reduce layers
 ENV NODE_ENV=production \
-	N8N_VERSION=$N8N_VERSION \
 	N8N_ENVIRONMENT=production \
 	N8N_RELEASE_TYPE=$N8N_RELEASE_TYPE \
 	N8N_PATH=/ \
@@ -26,25 +45,23 @@ ENV NODE_ENV=production \
 	PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 	PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
 	CHROME_BIN=/usr/bin/chromium \
-	CHROME_PATH=/usr/lib/chromium/
+	CHROME_PATH=/usr/lib/chromium/ \
+	NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
 
-# Speed up apt by using a faster mirror if specified
 RUN if [ "$DEBIAN_MIRROR" != "deb.debian.org" ]; then \
 	sed -i "s/deb.debian.org/$DEBIAN_MIRROR/g" /etc/apt/sources.list.d/*.list /etc/apt/sources.list 2>/dev/null || true; \
 	fi
 
-# Install base packages first (smaller, faster - cached separately)
 RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -y \
 	tini \
-  git \
+	git \
 	curl \
 	gosu \
 	python3 \
-	python3-pip \
 	build-essential \
+	ca-certificates \
 	&& rm -rf /var/lib/apt/lists/*
 
-# Install chromium and deps in separate layer (large package - with retry logic for resilience)
 RUN for i in 1 2 3; do \
 	apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -o Dpkg::Options::="--force-confold" -y \
 	chromium \
@@ -56,7 +73,6 @@ RUN for i in 1 2 3; do \
 	&& break || { echo "Attempt $i failed, retrying in 5s..."; sleep 5; }; done \
 	&& rm -rf /var/lib/apt/lists/*
 
-# Install media packages (separate layer for better caching)
 RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recommends=0 -y \
 	ffmpeg \
 	&& mkdir -p /home/node/.n8n \
@@ -76,68 +92,33 @@ RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recomm
 	&& apt-get autoremove --yes \
 	&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archives/*.deb
 
-# Set working directory
 WORKDIR /home/node
 
-# Add cache busting argument to force npm install rebuild
-ARG CACHE_BUST
-ENV CACHE_BUST=$CACHE_BUST
-
-# Install n8n via npm. Do not use mutable dist-tags such as `latest`; a Coolify
-# rebuild after an upstream merge would otherwise deploy a different n8n package
-# than the one that was previously tested.
-RUN npm config set update-notifier false && \
-	npm config set legacy-peer-deps true && \
-	npm config set fetch-retries 5 && \
-	npm config set fetch-retry-mintimeout 20000 && \
-	npm config set fetch-retry-maxtimeout 120000 && \
-	npm config set loglevel error && \
-	npm config set fetch-timeout 600000 && \
-	case "$N8N_VERSION" in \
-		latest|stable|next|beta|rc|snapshot|'') \
-			echo "N8N_VERSION must be pinned to an exact version, got '$N8N_VERSION'"; \
-			exit 1; \
-			;; \
-	esac && \
-	npm cache clean --force && \
-	npm install -g n8n@${N8N_VERSION} --omit=dev --force && \
-	npm rebuild sqlite3 && \
-	N8N_ENCRYPTION_KEY=build-smoke-test n8n --help > /tmp/n8n-help.txt && \
-	grep -q "start:" /tmp/n8n-help.txt && \
-	rm -f /tmp/n8n-help.txt && \
-	npm cache clean --force && \
-	echo "Installed n8n version: $(n8n --version) with Node.js $(node --version)"
-
-# Copy your custom entrypoint script (if needed)
+COPY --from=builder /build/compiled /usr/local/lib/node_modules/n8n
 COPY docker-entrypoint-debian2.sh /
 
-# Set correct permissions
 RUN chmod +x /docker-entrypoint-debian2.sh && \
-	# Set up required directories
+	ln -sf /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
+	cd /usr/local/lib/node_modules/n8n && \
+	npm rebuild sqlite3 && \
 	mkdir -p /home/node/.n8n/storage && \
 	mkdir -p /home/node/.n8n/nodes && \
 	chmod 700 /home/node/.n8n/storage && \
 	chmod 755 /home/node/.n8n/nodes && \
 	chown -R node:node /home/node && \
-	# Create symlink for MCP client compatibility
-	ln -sf /usr/local/bin/npx /usr/bin/npx
+	ln -sf /usr/local/bin/npx /usr/bin/npx && \
+	npm cache clean --force
 
-# Set environment variables for Node.js
-ENV NODE_PATH=/usr/local/lib/node_modules:/usr/local/lib/node_modules/n8n/node_modules
+RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');" && \
+	[ -f "$PUPPETEER_EXECUTABLE_PATH" ] && echo "Chromium successfully installed" && \
+	N8N_ENCRYPTION_KEY=build-smoke-test n8n --help > /tmp/n8n-help.txt && \
+	grep -q "start:" /tmp/n8n-help.txt && \
+	rm -f /tmp/n8n-help.txt
 
-# Verify n8n and package availability
-RUN node -e "require('n8n-core'); require('n8n-nodes-base'); console.log('n8n modules loaded successfully');" || echo "Module check failed but continuing" && \
-	[ -f "$PUPPETEER_EXECUTABLE_PATH" ] && echo "Chromium successfully installed" || echo "Warning: Chromium not found at expected path"
-
-# Expose n8n port
 EXPOSE 5678
 
-# Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 	CMD curl -f http://localhost:5678/healthz || exit 1
-
-# Note: We don't switch to USER node here because the entrypoint needs root
-# privileges to fix volume mount permissions. The entrypoint will drop privileges.
 
 ENTRYPOINT ["tini", "--", "/docker-entrypoint-debian2.sh"]
 CMD ["n8n", "start"]

@@ -5,12 +5,8 @@ services:
       context: .
       dockerfile: Dockerfile.debian8
       args:
-        N8N_VERSION: ${N8N_VERSION:-2.20.7-exp.0}
-        NODE_VERSION: ${NODE_VERSION:-22.16.0}
-        N8N_ENVIRONMENT: production
-        NODE_ENV: production
+        NODE_VERSION: ${NODE_VERSION:-24.15.0}
         N8N_RELEASE_TYPE: stable
-        CACHE_BUST: '20251223a'
     restart: always
     environment:
       DB_TYPE: postgresdb
@@ -23,11 +19,10 @@ services:
       N8N_RELEASE_TYPE: stable
       N8N_PORT: ${N8N_PORT:-5678}
       N8N_PATH: ${N8N_PATH:-/}
-      N8N_VERSION: ${N8N_VERSION:-2.20.7-exp.0}
       NODE_ENV: ${NODE_ENV:-production}
       N8N_FORCE_MIGRATION: ${N8N_FORCE_MIGRATION:-false}
       NODE_FUNCTION_ALLOW_EXTERNAL: ${NODE_FUNCTION_ALLOW_EXTERNAL:-crypto}
-      NODE_VERSION: ${NODE_VERSION:-22.16.0}
+      NODE_VERSION: ${NODE_VERSION:-24.15.0}
       NODE_OPTIONS: --experimental-modules
       WEBHOOK_URL: ${WEBHOOK_URL}
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Europe/London}
