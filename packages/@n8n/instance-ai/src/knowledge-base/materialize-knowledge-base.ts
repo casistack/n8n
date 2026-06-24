@@ -4,6 +4,7 @@ import {
 	WorkflowTechnique,
 	type WorkflowTechniqueType as BestPracticesGuideId,
 } from '@n8n/workflow-sdk/prompts/best-practices';
+import { SDK_LANGUAGE_REFERENCE } from '@n8n/workflow-sdk/prompts/sdk-reference';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { join as posixJoin } from 'node:path/posix';
@@ -12,7 +13,6 @@ import type { Logger } from '../logger';
 import {
 	buildTemplatesIndexFromArchive,
 	KNOWLEDGE_BASE_TEMPLATES_DIR,
-	type KnowledgeBaseTemplateEntry,
 } from './build-templates-index';
 export { KNOWLEDGE_BASE_TEMPLATES_DIR };
 import { extractBuilderTemplatesArchive } from './extract-builder-templates-archive';
@@ -67,7 +67,6 @@ export interface KnowledgeBaseRootIndex {
 	};
 	templates: {
 		indexFile: string;
-		entries: KnowledgeBaseTemplateEntry[];
 	};
 	reference: {
 		indexFile: string;
@@ -91,7 +90,7 @@ export interface KnowledgeBaseWorkspaceBundle {
 export interface BuildKnowledgeBaseWorkspaceBundleOptions {
 	root: string;
 	templatesArchive?: Buffer | null;
-	logger?: Logger;
+	logger: Logger;
 }
 
 interface MaterializeKnowledgeBaseOptions extends BuildKnowledgeBaseWorkspaceBundleOptions {
@@ -102,14 +101,14 @@ function addTemplatesToKnowledgeBaseFiles(
 	files: Map<string, string>,
 	rootDir: string,
 	templatesArchive: Buffer,
-	logger?: Logger,
-): KnowledgeBaseTemplateEntry[] {
+	logger: Logger,
+): void {
 	const extracted = extractBuilderTemplatesArchive(templatesArchive);
 	if (!extracted) {
-		logger?.warn('[knowledge-base] rejected templates archive during bundle build', {
+		logger.warn('[knowledge-base] rejected templates archive during bundle build', {
 			archiveBytes: templatesArchive.byteLength,
 		});
-		return [];
+		return;
 	}
 
 	const templatesIndex = buildTemplatesIndexFromArchive(extracted);
@@ -126,18 +125,39 @@ function addTemplatesToKnowledgeBaseFiles(
 	// The decompressed archive has been copied into `files`; release the
 	// intermediate map so the duplicate copy isn't held until GC.
 	extracted.clear();
-
-	return templatesIndex.entries;
 }
 
 const KNOWLEDGE_BASE_REFERENCE_ENTRIES: Array<
-	Pick<KnowledgeBaseReferenceIndexEntry, 'id' | 'description'> & { fileName: string }
+	Pick<KnowledgeBaseReferenceIndexEntry, 'id' | 'description'> & {
+		fileName: string;
+		/** When set, content comes from this string instead of a source file. */
+		content?: string;
+	}
 > = [
 	{
 		id: 'trigger-input-data-shapes',
 		description:
 			'Per-trigger inputData shapes for verify-built-workflow and executions(action="run")',
 		fileName: 'trigger-input-data-shapes.md',
+	},
+	{
+		id: 'open-ai-output-shape',
+		description:
+			'OpenAI node (@n8n/n8n-nodes-langchain.openAi) output shape for downstream expressions',
+		fileName: 'open-ai-output-shape.md',
+	},
+	{
+		id: 'workflow-builder-guardrails',
+		description:
+			'Workflow builder guardrails for source preservation, fan-out/fan-in, effects, and Code nodes',
+		fileName: 'workflow-builder-guardrails.md',
+	},
+	{
+		id: 'workflow-sdk-language',
+		description:
+			'Allowed/forbidden constructs in workflow SDK builder code: methods, globals, language subset',
+		fileName: 'workflow-sdk-language.md',
+		content: SDK_LANGUAGE_REFERENCE,
 	},
 ];
 
@@ -152,12 +172,10 @@ async function addReferenceFilesToKnowledgeBase(
 	const referenceEntries: KnowledgeBaseReferenceIndexEntry[] = [];
 
 	for (const entry of KNOWLEDGE_BASE_REFERENCE_ENTRIES) {
-		const sourcePath = join(referenceSourceDir, entry.fileName);
 		const relativeFilePath = posixJoin(KNOWLEDGE_BASE_REFERENCE_DIR, entry.fileName);
-		files.set(
-			posixJoin(rootDir, relativeFilePath),
-			withTrailingNewline(await readFile(sourcePath, 'utf-8')),
-		);
+		const content =
+			entry.content ?? (await readFile(join(referenceSourceDir, entry.fileName), 'utf-8'));
+		files.set(posixJoin(rootDir, relativeFilePath), withTrailingNewline(content));
 		referenceEntries.push({
 			id: entry.id,
 			description: entry.description,
@@ -222,9 +240,9 @@ export async function buildKnowledgeBaseWorkspaceBundle(
 	const bestPracticesIndex: KnowledgeBaseBestPracticesIndex = { entries: bestPracticeEntries };
 	files.set(bestPracticesIndexPath, stringifyWorkspaceJson(bestPracticesIndex));
 
-	const templateEntries = templatesArchive
-		? addTemplatesToKnowledgeBaseFiles(files, rootDir, templatesArchive, logger)
-		: [];
+	if (templatesArchive) {
+		addTemplatesToKnowledgeBaseFiles(files, rootDir, templatesArchive, logger);
+	}
 	const referenceEntries = await addReferenceFilesToKnowledgeBase(files, rootDir);
 
 	const rootIndexPath = posixJoin(rootDir, KNOWLEDGE_BASE_INDEX_FILE);
@@ -235,7 +253,6 @@ export async function buildKnowledgeBaseWorkspaceBundle(
 		},
 		templates: {
 			indexFile: posixJoin(KNOWLEDGE_BASE_TEMPLATES_DIR, KNOWLEDGE_BASE_INDEX_FILE),
-			entries: templateEntries,
 		},
 		reference: {
 			indexFile: posixJoin(KNOWLEDGE_BASE_REFERENCE_DIR, KNOWLEDGE_BASE_INDEX_FILE),
