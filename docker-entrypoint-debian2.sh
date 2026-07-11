@@ -1,45 +1,17 @@
 #!/bin/bash
 set -e
 
-# Debug information
-echo "Current user: $(whoami)"
-echo "Current PATH: $PATH"
-echo "n8n location: $(which n8n)"
-echo "n8n version: $(n8n --version)"
-echo "n8n executable permissions: $(ls -l $(which n8n))"
-echo "n8n symlink target: $(readlink -f $(which n8n))"
-echo "n8n directory contents: $(ls -l $(dirname $(which n8n)))"
-echo "Node version: $(node --version)"
-echo "NPM version: $(npm --version)"
-echo "NPM global packages:"
-echo "NODE_PATH: $NODE_PATH"
-npm list -g --depth=0
+if ! command -v n8n &> /dev/null; then
+    echo "Error: n8n command not found"
+    exit 1
+fi
 
-# Check n8n module paths
-echo "n8n base nodes path: $(node -e "console.log(require.resolve('n8n-nodes-base'))")"
-echo "n8n core path: $(node -e "console.log(require.resolve('n8n-core'))")"
+n8n_path=$(command -v n8n)
+n8n_package_json=/usr/local/lib/node_modules/n8n/package.json
+n8n_version=$(node -p "require('$n8n_package_json').version")
 
-# Function to compare versions
-##version_gt() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" != "$1"; }
-
-##install_custom_packages() {
-    ##local package_dir="/data/mypackages"
-    ##local install_dir="/home/node/.n8n/custom"
-    
-    ##if [ -d "$package_dir" ] && [ "$(ls -A $package_dir)" ]; then
-      ##  for package in $package_dir/*.tgz; do
-        ##    if [ -f "$package" ]; then
-          ##      echo "Installing custom package: $(basename "$package")"
-            ##    npm install --no-save --prefix "$install_dir" "$package"
-            ##fi
-        ##done
-        ##echo "Custom packages installed."
-    ##else
-      ##  echo "No custom packages found in $package_dir"
-    ##fi
-##}
-
-##install_custom_packages
+echo "Starting n8n $n8n_version with Node $(node --version)"
+echo "n8n executable: $n8n_path -> $(readlink -f "$n8n_path")"
 
 # Check if Chromium is available
 if [ -f "$PUPPETEER_EXECUTABLE_PATH" ]; then
@@ -57,12 +29,6 @@ if [ -d /opt/custom-certificates ]; then
   c_rehash /opt/custom-certificates
 fi
 
-# Check if n8n is available
-if ! command -v n8n &> /dev/null; then
-    echo "Error: n8n command not found"
-    exit 1
-fi
-
 echo "Cleaning up Chrome lock files..."
 rm -f /data2/session-session/SingletonLock
 rm -f /data2/session-session/SingletonCookie
@@ -70,30 +36,28 @@ rm -f /data2/session-session/SingletonSocket
 rm -f /data2/session-session/DevToolsActivePort
 echo "Chrome lock files cleaned up"
 
-# Fix permissions for custom nodes directory (running as root)
-if [ -d "/home/node/.n8n/nodes" ]; then
-    echo "Fixing permissions for custom nodes directory..."
-    chown -R node:node /home/node/.n8n/nodes 2>/dev/null || echo "Warning: Could not change ownership of nodes directory"
-    chmod -R 755 /home/node/.n8n/nodes 2>/dev/null || echo "Warning: Could not fix permissions in nodes directory"
-    echo "Permissions fixed for custom nodes directory"
+# Repair persisted ownership only when a mismatch exists.
+if [ -d /home/node/.n8n ] && [ -n "$(find /home/node/.n8n \( ! -user node -o ! -group node \) -print -quit 2>/dev/null)" ]; then
+    echo "Fixing ownership of /home/node/.n8n..."
+    chown -R node:node /home/node/.n8n 2>/dev/null || echo "Warning: Could not change ownership of /home/node/.n8n"
 fi
 
-# Ensure the node user owns their home directory
-chown -R node:node /home/node/.n8n 2>/dev/null || true
+if [ -d /home/node/.n8n/nodes ] && [ -n "$(find /home/node/.n8n/nodes ! -type l ! -perm 0755 -print -quit 2>/dev/null)" ]; then
+    echo "Fixing permissions for custom nodes directory..."
+    chmod -R 755 /home/node/.n8n/nodes 2>/dev/null || echo "Warning: Could not fix permissions in nodes directory"
+fi
 
 # Fix permissions for /data2 directory (for WhatsApp sessions and other data)
 if [ -d "/data2" ]; then
-    # Check ownership and fix if necessary
-    current_owner=$(stat -c '%U' /data2 2>/dev/null || echo "unknown")
-    if [ "$current_owner" != "node" ]; then
-        echo "Fixing ownership of /data2 directory (currently owned by $current_owner)..."
+    if [ -n "$(find /data2 \( ! -user node -o ! -group node \) -print -quit 2>/dev/null)" ]; then
+        echo "Fixing ownership of /data2 directory..."
         chown -R node:node /data2 2>/dev/null || echo "Warning: Could not change ownership of /data2 directory"
     fi
-    
-    # Always enforce strict 700 permissions for Chrome security
-    # This ensures session data is persisted correctly
-    echo "Enforcing secure permissions (700) on /data2..."
-    chmod -R 700 /data2 2>/dev/null || echo "Warning: Could not fix permissions in /data2 directory"
+
+    if [ -n "$(find /data2 ! -type l ! -perm 0700 -print -quit 2>/dev/null)" ]; then
+        echo "Enforcing secure permissions (700) on /data2..."
+        chmod -R 700 /data2 2>/dev/null || echo "Warning: Could not fix permissions in /data2 directory"
+    fi
 fi
 
 # Execute the main command as the node user (drop privileges)
