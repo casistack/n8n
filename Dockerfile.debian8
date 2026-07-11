@@ -22,11 +22,22 @@ RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recomm
 	ca-certificates \
 	&& rm -rf /var/lib/apt/lists/*
 
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY patches ./patches
+
+RUN --mount=type=cache,id=n8n-pnpm-store,target=/pnpm/store,sharing=locked \
+	corepack enable && \
+	pnpm config set store-dir /pnpm/store && \
+	pnpm fetch --frozen-lockfile
+
 COPY . .
 
-RUN corepack enable && \
+RUN --mount=type=cache,id=n8n-pnpm-store,target=/pnpm/store,sharing=locked \
+	--mount=type=cache,id=n8n-turbo-cache,target=/build/.turbo,sharing=locked \
+	corepack enable && \
+	pnpm config set store-dir /pnpm/store && \
 	pnpm --version && \
-	pnpm install --frozen-lockfile && \
+	pnpm install --offline --frozen-lockfile && \
 	node scripts/build-n8n.mjs
 
 FROM node:${NODE_VERSION}-bookworm-slim
