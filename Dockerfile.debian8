@@ -7,7 +7,9 @@ ARG DEBIAN_MIRROR=ftp.uk.debian.org
 
 ENV CI=true \
 	COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
-	DEBIAN_FRONTEND=noninteractive
+	DEBIAN_FRONTEND=noninteractive \
+	npm_config_loglevel=info \
+	npm_config_reporter=append-only
 
 WORKDIR /build
 
@@ -28,7 +30,7 @@ COPY patches ./patches
 RUN --mount=type=cache,id=n8n-pnpm-store,target=/pnpm/store,sharing=locked \
 	corepack enable && \
 	pnpm config set store-dir /pnpm/store && \
-	pnpm fetch --frozen-lockfile
+	pnpm fetch --frozen-lockfile --reporter=append-only --loglevel=info
 
 COPY . .
 
@@ -37,7 +39,7 @@ RUN --mount=type=cache,id=n8n-pnpm-store,target=/pnpm/store,sharing=locked \
 	corepack enable && \
 	pnpm config set store-dir /pnpm/store && \
 	pnpm --version && \
-	pnpm install --offline --frozen-lockfile && \
+	pnpm install --offline --frozen-lockfile --reporter=append-only --loglevel=info && \
 	node scripts/build-n8n.mjs
 
 FROM node:${NODE_VERSION}-bookworm-slim
