@@ -13,6 +13,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { resolveArtifactContext } from './artifacts/artifact-context';
 import { captureThreadRunDebug } from './capture-run-debug';
 import {
 	SSE_SETTLE_DELAY_MS,
@@ -33,6 +34,7 @@ import { reconstructSeedFromThread, type SeedThreadRef } from './langsmith-seed'
 import { type EvalLogger } from './logger';
 import { fetchPrebuiltBuild } from './prebuilt-workflows';
 import {
+	classifyScenarioExecutionError,
 	extractErrorMessage,
 	isTransientExecutionAbort,
 	MAX_EXEC_ATTEMPTS,
@@ -55,7 +57,9 @@ import {
 } from '../outcome/event-parser';
 import { buildTranscriptFromEvents } from '../outcome/transcript-from-events';
 import { buildAgentOutcome, extractWorkflowIdsFromMessages } from '../outcome/workflow-discovery';
+import { requiresWorkflowOutput } from '../summary';
 import type {
+	ArtifactRef,
 	BuildTrace,
 	ChecklistItem,
 	ChecklistResult,
@@ -262,6 +266,35 @@ interface WorkflowTestCaseConfig {
 }
 
 /**
+ * Synthetic result for a test case whose run threw before it could produce one
+ * (a budget/timeout abort, a lane meltdown, an OOM). Recording it — instead of
+ * letting the throw reject the batch — keeps every OTHER case's already-completed
+ * results, and keeps this case index-aligned so the aggregator counts it rather
+ * than losing the whole run. One `framework_issue` row per declared scenario
+ * carries the pinned cross-repo contract (timeout-flavoured rootCause for budget
+ * aborts) so the lang-tracer side buckets it as infra, not product quality.
+ */
+export function abortedWorkflowTestCaseResult(
+	testCase: WorkflowTestCase,
+	baseUrl: string,
+	errorMessage: string,
+): WorkflowTestCaseResult {
+	const classified = classifyScenarioExecutionError(errorMessage);
+	return {
+		testCase,
+		workflowBuildSuccess: false,
+		buildError: errorMessage,
+		n8nBaseUrl: baseUrl,
+		executionScenarioResults: (testCase.executionScenarios ?? []).map((scenario) => ({
+			scenario,
+			success: false,
+			score: 0,
+			...classified,
+		})),
+	};
+}
+
+/**
  * All-in-one test case runner: build workflow + run all scenarios + cleanup.
  * Used by the CLI. The split API (buildWorkflow + executeScenario + cleanupBuild)
  * is available for custom orchestration (e.g. LangSmith evaluate).
@@ -340,24 +373,50 @@ export async function runWorkflowTestCase(
 			isPrebuilt,
 			logger,
 		});
-	const expectationsPromise: Promise<BuildExpectationResult[]> =
+	// Render non-workflow artifacts (agent, config-eval) into judge context, so outcome
+	// expectations can assert their existence/absence/content. Independent of whether a
+	// workflow was built — those artifacts save outside the workflow path. Discovery uses the
+	// refs captured from the SSE stream during the build (no thread-message re-fetch); only
+	// needed when there are expectations to judge.
+	const artifactContextPromise: Promise<string | undefined> =
 		expectationsToJudge.length > 0
-			? verifyBuildExpectations(expectationsToJudge, {
-					transcript: expectationsTranscript,
-					workflowJson: build.workflowJsons[0],
-					metrics: build.conversationMetrics,
+			? resolveArtifactContext({
+					artifactRefs: build.artifactRefs ?? [],
+					client,
+					logger,
 				}).catch((error: unknown) => {
 					logger.warn(
-						`  Author expectations judge errored: ${error instanceof Error ? error.message : String(error)}`,
+						`  Artifact context resolution failed: ${error instanceof Error ? error.message : String(error)}`,
 					);
-					return allFailVerdicts(expectationsToJudge, 'judge error');
+					return undefined;
 				})
+			: Promise.resolve<string | undefined>(undefined);
+
+	const expectationsPromise: Promise<BuildExpectationResult[]> =
+		expectationsToJudge.length > 0
+			? artifactContextPromise
+					.then(
+						async (artifactContext) =>
+							await verifyBuildExpectations(expectationsToJudge, {
+								transcript: expectationsTranscript,
+								workflowJson: build.workflowJsons[0],
+								metrics: build.conversationMetrics,
+								artifactContext,
+							}),
+					)
+					.catch((error: unknown) => {
+						logger.warn(
+							`  Author expectations judge errored: ${error instanceof Error ? error.message : String(error)}`,
+						);
+						return allFailVerdicts(expectationsToJudge, 'judge error');
+					})
 			: Promise.resolve<BuildExpectationResult[]>([]);
 
 	// Answer-only cases (workflowExpectedForCase === false) legitimately end
 	// without a saved workflow — buildWorkflow reports them as a successful
-	// no-workflow build. Grade them on the conversation via the author
-	// expectations below; there are no scenarios to execute.
+	// no-workflow build. This also covers agent/config-eval builds: they produce
+	// no workflow by design and are graded on the rendered artifact context via
+	// the author expectations below (there are no scenarios to execute).
 	if (build.success && !build.workflowId) {
 		result.workflowBuildSuccess = true;
 		result.buildTrace = build.buildTrace;
@@ -366,12 +425,16 @@ export async function runWorkflowTestCase(
 		return result;
 	}
 
+	// Build failed. A missing workflow is only a build failure when the case actually
+	// expects one (i.e. it has execution scenarios) and the conversation didn't finish;
+	// an artifact/answer case that completed is graded on its expectations instead.
 	if (!build.success || !build.workflowId) {
-		result.buildError = build.error;
 		const expectationResults = await expectationsPromise;
-		const buildExpectationResults = expectationResults;
-		if (buildExpectationResults.length > 0)
-			result.buildExpectationResults = buildExpectationResults;
+		if (expectationResults.length > 0) result.buildExpectationResults = expectationResults;
+
+		const artifactOnlyCompleted =
+			!requiresWorkflowOutput(testCase) && build.transcript !== undefined;
+		if (!artifactOnlyCompleted) result.buildError = build.error;
 		return result;
 	}
 
@@ -409,29 +472,31 @@ export async function runWorkflowTestCase(
 					}
 					// executeScenario categorizes builder/mock/verification failures
 					// internally; an error escaping it is an infra/framework problem
-					// (network drop, n8n API error, verifier timeout). Tag it
-					// framework_issue so the report and baseline keep it out of builder
-					// regressions instead of scoring it as an uncategorized failure.
+					// (network drop, n8n API error, verifier timeout, per-iteration
+					// budget abort). Tag it framework_issue — with a timeout-flavoured
+					// rootCause when it's a budget abort — so the report and baseline
+					// keep it out of builder regressions instead of scoring it as an
+					// uncategorized failure, and this one timed-out scenario doesn't
+					// take the whole case's already-completed scenarios down with it.
 					logger.error(`    ERROR [${scenario.name}]: ${errorMessage}`);
 					return {
 						scenario,
 						success: false,
 						score: 0,
-						reasoning: `Scenario execution error: ${errorMessage}`,
-						failureCategory: 'framework_issue',
+						...classifyScenarioExecutionError(errorMessage),
 					} satisfies ExecutionScenarioResult;
 				}
 			}
 		},
 		MAX_CONCURRENT_SCENARIOS,
 	);
+
 	const [scenarioResults, expectationResults] = await Promise.all([
 		scenariosPromise,
 		expectationsPromise,
 	]);
 	result.executionScenarioResults = scenarioResults;
-	const buildExpectationResults = expectationResults;
-	if (buildExpectationResults.length > 0) result.buildExpectationResults = buildExpectationResults;
+	if (expectationResults.length > 0) result.buildExpectationResults = expectationResults;
 
 	const scenarioMs = Date.now() - scenarioStart;
 	logger.info(
@@ -517,6 +582,9 @@ export interface BuildResult {
 	/** IDs to pass to cleanupBuild() */
 	createdWorkflowIds: string[];
 	createdDataTableIds: string[];
+	/** Non-workflow artifact refs (agent, config-eval) captured from the SSE stream,
+	 *  fed to the build-expectations judge context. Empty/undefined for prebuilt runs. */
+	artifactRefs?: ArtifactRef[];
 	/** Per-turn deterministic counters extracted from the captured event stream. */
 	conversationMetrics?: ConversationMetrics;
 	/** Captured SSE events from the build run. */
@@ -830,6 +898,7 @@ export async function buildWorkflow(config: BuildWorkflowConfig): Promise<BuildR
 				buildTrace,
 				createdWorkflowIds: restoredWorkflowIds,
 				createdDataTableIds: [...outcome.dataTablesCreated, ...restoredDataTableIds],
+				artifactRefs: eventOutcome.artifactRefs,
 				conversationMetrics,
 				events,
 				threadId,
@@ -863,6 +932,7 @@ export async function buildWorkflow(config: BuildWorkflowConfig): Promise<BuildR
 			buildTrace,
 			createdWorkflowIds: outcome.workflowsCreated.map((wf) => wf.id),
 			createdDataTableIds: [...outcome.dataTablesCreated, ...restoredDataTableIds],
+			artifactRefs: eventOutcome.artifactRefs,
 			conversationMetrics,
 			events,
 			threadId,
