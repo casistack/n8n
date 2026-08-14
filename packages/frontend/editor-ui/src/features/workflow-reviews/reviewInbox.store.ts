@@ -17,12 +17,9 @@ import {
 	fetchWorkflowReviewRequestDetail,
 	type WorkflowReviewDecisionInput,
 } from './workflowReviews.api';
+import { toError } from './workflowReviews.utils';
 
 const DEFAULT_LIMIT = 15;
-
-function toError(error: unknown): Error {
-	return error instanceof Error ? error : new Error(String(error));
-}
 
 export const useReviewInboxStore = defineStore('workflowReviewInbox', () => {
 	const rootStore = useRootStore();
@@ -206,6 +203,7 @@ export const useReviewInboxStore = defineStore('workflowReviewInbox', () => {
 	/**
 	 * Submit a decision and patch the affected item in place. Approving closes
 	 * the request; the closed tab refetches on activation and picks it up there.
+	 * Returns the response so callers can surface the auto-publish outcome.
 	 */
 	async function decideOnReview(id: string, decision: WorkflowReviewDecisionInput) {
 		const summary = await decideWorkflowReviewRequest(rootStore.restApiContext, id, { decision });
@@ -232,6 +230,8 @@ export const useReviewInboxStore = defineStore('workflowReviewInbox', () => {
 		if (item && item.state !== activeTab.value) {
 			items.value = items.value.filter((candidate) => candidate.id !== item.id);
 		}
+
+		return summary;
 	}
 
 	function reset() {

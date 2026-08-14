@@ -28,6 +28,7 @@ describe('useReviewInboxStore', () => {
 					workflowName: 'My workflow',
 					workflowVersionId: null,
 					requester: null,
+					authors: [],
 					reviewers: [],
 					decision: 'pending',
 					state: 'open',
@@ -142,6 +143,7 @@ describe('useReviewInboxStore', () => {
 						workflowName: null,
 						workflowVersionId: null,
 						requester: null,
+						authors: [],
 						reviewers: [],
 						decision: 'pending',
 						state: 'closed',
@@ -210,6 +212,7 @@ describe('useReviewInboxStore', () => {
 						workflowName: null,
 						workflowVersionId: null,
 						requester: null,
+						authors: [],
 						reviewers: [],
 						decision: 'pending',
 						state: 'open',
@@ -250,6 +253,7 @@ describe('useReviewInboxStore', () => {
 			workflowName: 'My workflow',
 			workflowVersionId: null,
 			requester: null,
+			authors: [],
 			reviewers: [],
 			decision: 'pending',
 			state: 'open',
@@ -343,6 +347,23 @@ describe('useReviewInboxStore', () => {
 			]);
 			expect(store.openCount).toBe(2);
 			expect(store.closedCount).toBe(5);
+		});
+
+		it('returns the response so callers can surface the auto-publish outcome', async () => {
+			const store = await seedStoreWithOpenItem();
+			vi.mocked(workflowReviewsApi.decideWorkflowReviewRequest).mockResolvedValue({
+				id: 'req-1',
+				state: 'closed',
+				decision: 'approved',
+				workflowVersionId: null,
+				createdAt: '2024-01-01T00:00:00.000Z',
+				updatedAt: '2024-01-02T00:00:00.000Z',
+				autoPublish: { status: 'published' },
+			});
+
+			const response = await store.decideOnReview('req-1', 'approved');
+
+			expect(response.autoPublish).toEqual({ status: 'published' });
 		});
 
 		it('rethrows an API error and leaves the state untouched', async () => {
@@ -481,6 +502,7 @@ function createDetail(): WorkflowReviewRequestDetail {
 		workflowName: 'My workflow',
 		workflowVersionId: null,
 		requester: null,
+		authors: [],
 		reviewers: [],
 		decision: 'pending',
 		state: 'open',
@@ -488,5 +510,8 @@ function createDetail(): WorkflowReviewRequestDetail {
 		updatedAt: '2024-01-01T00:00:00.000Z',
 		description: null,
 		workflows: [],
+		viewerCanDecide: true,
+		viewerDecisionIneligibilityReason: null,
+		viewerCanComment: true,
 	};
 }
