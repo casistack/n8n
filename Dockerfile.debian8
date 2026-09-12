@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -o APT::Status-Fd=1 -o APT::Install-Recomm
 	ca-certificates \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
 
 RUN --mount=type=cache,id=n8n-pnpm-store,target=/pnpm/store,sharing=locked \
