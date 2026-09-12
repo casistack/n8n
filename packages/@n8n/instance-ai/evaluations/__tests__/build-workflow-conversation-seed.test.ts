@@ -1,8 +1,8 @@
 import { vi } from 'vitest';
 
 import type { N8nClient } from '../clients/n8n-client';
-import { buildWorkflow } from '../harness/build-workflow';
-import { recordUserTurn } from '../harness/chat-loop';
+import { buildWorkflow, buildFailedOnInfra } from '../harness/build-workflow';
+import { recordUserTurn, runMultiTurnConversation } from '../harness/chat-loop';
 import type { ConversationSeed } from '../harness/conversation-seed';
 import type { EvalLogger } from '../harness/logger';
 
@@ -79,6 +79,7 @@ function inlineSeed(): ConversationSeed {
 		workflows: [{ id: SEED_WF_ID, name: 'Batch loop', nodes: [], connections: {} }],
 		dataTables: [],
 		agents: [],
+		projects: [],
 	};
 }
 
@@ -297,14 +298,12 @@ describe('buildWorkflow with an inline seed', () => {
 	// and never hunts by name.
 	it('sends the attached seed workflow with the opening message, using the REMAPPED id', async () => {
 		const sendMessage = vi.fn().mockResolvedValue({ runId: 'run-1' });
-		const restoreThread = vi
-			.fn()
-			.mockResolvedValue({
-				restored: 1,
-				workflowIds: ['restored-wf-1'],
-				dataTableIds: [],
-				agentIds: [],
-			});
+		const restoreThread = vi.fn().mockResolvedValue({
+			restored: 1,
+			workflowIds: ['restored-wf-1'],
+			dataTableIds: [],
+			agentIds: [],
+		});
 		await buildWorkflow({
 			client: makeClient(restoreThread, { sendMessage }),
 			...baseConfig,
@@ -339,14 +338,12 @@ describe('buildWorkflow with an inline seed', () => {
 	// empty strings). The recorded turn names it instead.
 	it('names the attached workflow in the RECORDED turn, so judges can see the hand-off', async () => {
 		const sendMessage = vi.fn().mockResolvedValue({ runId: 'run-1' });
-		const restoreThread = vi
-			.fn()
-			.mockResolvedValue({
-				restored: 1,
-				workflowIds: ['restored-wf-1'],
-				dataTableIds: [],
-				agentIds: [],
-			});
+		const restoreThread = vi.fn().mockResolvedValue({
+			restored: 1,
+			workflowIds: ['restored-wf-1'],
+			dataTableIds: [],
+			agentIds: [],
+		});
 		vi.mocked(recordUserTurn).mockClear();
 
 		await buildWorkflow({
@@ -374,14 +371,12 @@ describe('buildWorkflow with an inline seed', () => {
 	// hand-off case with follow-ups would otherwise audit plans and decide follow-ups
 	// against a blank opening turn that never mentions the workflow.
 	it('names the attached workflow in the script the user proxy reads', async () => {
-		const restoreThread = vi
-			.fn()
-			.mockResolvedValue({
-				restored: 1,
-				workflowIds: ['restored-wf-1'],
-				dataTableIds: [],
-				agentIds: [],
-			});
+		const restoreThread = vi.fn().mockResolvedValue({
+			restored: 1,
+			workflowIds: ['restored-wf-1'],
+			dataTableIds: [],
+			agentIds: [],
+		});
 		proxyScripts.length = 0;
 
 		await buildWorkflow({
@@ -406,14 +401,12 @@ describe('buildWorkflow with an inline seed', () => {
 		// The schema refuses an `attach` the seed does not declare, so a miss here means
 		// the restore/remap lost it. Running on would silently downgrade the case to a
 		// find-it test and grade the wrong thing.
-		const restoreThread = vi
-			.fn()
-			.mockResolvedValue({
-				restored: 1,
-				workflowIds: ['restored-wf-1'],
-				dataTableIds: [],
-				agentIds: [],
-			});
+		const restoreThread = vi.fn().mockResolvedValue({
+			restored: 1,
+			workflowIds: ['restored-wf-1'],
+			dataTableIds: [],
+			agentIds: [],
+		});
 
 		const result = await buildWorkflow({
 			client: makeClient(restoreThread, { sendMessage: vi.fn().mockResolvedValue({ runId: 'r' }) }),
@@ -459,12 +452,71 @@ describe('buildWorkflow with an inline seed', () => {
 });
 
 describe('buildWorkflow with scenario seed data tables', () => {
+	afterEach(() => vi.restoreAllMocks());
 	const jobApplications = {
 		id: 'job-applications-1234',
 		name: 'Job Applications',
 		columns: [{ name: 'application_id', type: 'string' as const }],
 		rows: [{ application_id: 'row_001' }],
 	};
+
+	it.each([false, true])(
+		'classifies input reseeding failures (case expired=%s)',
+		async (expired) => {
+			let now = 1_000;
+			vi.spyOn(Date, 'now').mockImplementation(() => now);
+			const client = makeClient(
+				vi.fn().mockResolvedValue({
+					restored: 0,
+					workflowIds: [],
+					dataTableIds: ['dt-real-1'],
+					agentIds: [],
+				}),
+			);
+			client.seedDataTableRows = vi
+				.fn()
+				.mockRejectedValue(new Error('Input rows could not be seeded'));
+			vi.mocked(runMultiTurnConversation).mockImplementationOnce(async (config) => {
+				if (!config.beforeUserExecution) throw new Error('Missing input preparation');
+				const deadline = config.startTime + config.timeoutMs;
+				if (expired) now = deadline;
+				await config.beforeUserExecution(deadline);
+			});
+			const result = await buildWorkflow({
+				...baseConfig,
+				client,
+				allowUserExecution: true,
+				conversation: [
+					{ role: 'user', text: 'Build a contact log' },
+					{ role: 'user', text: 'I ran it' },
+				],
+				executionScenarios: [
+					{
+						name: 'inputs',
+						description: '',
+						dataSetup: '',
+						successCriteria: '',
+						seedDataTables: [jobApplications],
+					},
+				],
+			});
+			expect(result.success).toBe(false);
+			expect(result.seedingFailed).toBe(!expired);
+			expect(buildFailedOnInfra(result)).toBe(!expired);
+			expect(result.error).toContain(expired ? 'Case timed out' : 'Input rows could not be seeded');
+		},
+	);
+
+	it('rejects an invalid mode before creating a thread', async () => {
+		vi.stubEnv('N8N_EVAL_BUILD_MODE', 'progresssive');
+		try {
+			const client = makeClient(vi.fn());
+			await expect(buildWorkflow({ ...baseConfig, client })).rejects.toThrow('N8N_EVAL_BUILD_MODE');
+			expect(client.ensureThread).not.toHaveBeenCalled();
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
 
 	it('creates the table under a per-run name and tells the agent THAT name', async () => {
 		// The name is project-unique, so a per-run suffix is what lets two iterations of

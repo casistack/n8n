@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import { BasePage } from './BasePage';
+import { hoverToReveal } from '../utils/retry-utils';
 import { CredentialModal } from './components/CredentialModal';
 import { InstanceAiSidebar } from './components/InstanceAiSidebar';
 import { InstanceAiWorkflowSetup } from './components/InstanceAiWorkflowSetup';
@@ -29,7 +30,7 @@ export class InstanceAiPage extends BasePage {
 		await this.getChatInput()
 			.waitFor({ state: 'visible', timeout: 10_000 })
 			.catch(async () => {
-				const aiMenuItem = this.page.getByRole('menuitem', { name: 'AI Assistant' });
+				const aiMenuItem = this.page.getByRole('menuitem', { name: 'n8n Assistant' });
 				await aiMenuItem.click({ timeout: 10_000 });
 				await this.enableInstanceAiIfPrompted();
 			});
@@ -53,7 +54,7 @@ export class InstanceAiPage extends BasePage {
 	}
 
 	getOnboardingWizard(): Locator {
-		return this.page.getByRole('dialog', { name: 'Set up AI Assistant' });
+		return this.page.getByRole('dialog', { name: 'Set up n8n Assistant' });
 	}
 
 	getWizardPrimaryButton(): Locator {
@@ -74,7 +75,7 @@ export class InstanceAiPage extends BasePage {
 
 	getOnboardingDoneHeading(): Locator {
 		return this.getOnboardingWizard().getByRole('heading', {
-			name: 'AI Assistant is on for everyone on this instance',
+			name: 'n8n Assistant is on for everyone on this instance',
 		});
 	}
 
@@ -87,20 +88,27 @@ export class InstanceAiPage extends BasePage {
 	}
 
 	async enableInstanceAiIfPrompted(): Promise<void> {
-		const dialog = this.page.getByRole('dialog').filter({ hasText: 'Try AI Assistant' });
+		const dialog = this.page.getByRole('dialog').filter({ hasText: 'Try new n8n Assistant' });
 		try {
 			await dialog.waitFor({ state: 'visible', timeout: 3_000 });
 		} catch {
 			return;
 		}
 
-		await dialog.getByRole('button', { name: /Enable AI Assistant on this instance/ }).click();
+		await dialog.getByRole('button', { name: /Enable n8n Assistant on this instance/ }).click();
 		await dialog.getByRole('button', { name: /^(Continue|Enable)$/ }).click();
 		await dialog.waitFor({ state: 'hidden' });
 	}
 
 	async gotoThread(threadId: string): Promise<void> {
 		await this.page.goto(`/assistant/${threadId}`);
+	}
+
+	/** Thread id of the conversation currently open, read from the URL. */
+	getCurrentThreadId(): string {
+		const threadId = new URL(this.page.url()).pathname.split('/').pop();
+		if (!threadId) throw new Error(`No thread id in URL: ${this.page.url()}`);
+		return threadId;
 	}
 
 	getContainer(): Locator {
@@ -153,6 +161,16 @@ export class InstanceAiPage extends BasePage {
 		return this.getAssistantMessages().getByText(text);
 	}
 
+	/**
+	 * Text anywhere in the chat panel. Broader than `getAssistantMessageText`: a run's
+	 * output can land outside an assistant-message bubble (an error callout, a status
+	 * line), so use this when the assertion is "the panel says this" rather than "this
+	 * message says this".
+	 */
+	getPanelText(text: string | RegExp): Locator {
+		return this.getContainer().getByText(text);
+	}
+
 	/** Tailored out-of-credits error callout shown when a run fails due to exhausted quota. */
 	getOutOfCreditsError(): Locator {
 		return this.container.getByTestId('instance-ai-out-of-credits');
@@ -183,6 +201,19 @@ export class InstanceAiPage extends BasePage {
 
 	getAttachmentsAt(messageIndex: number): Locator {
 		return this.getUserMessages().nth(messageIndex).getByTestId('chat-file');
+	}
+
+	/**
+	 * Files staged in the composer but not yet sent, counted via each preview's remove
+	 * control. Two markers are needed: `AttachmentPreview` renders
+	 * `attachment-preview-remove` for image thumbnails, while non-image files fall
+	 * through to `ChatFile`, whose control is `chat-file-remove`. Matching only the
+	 * first would silently count 0 for a staged PDF or CSV.
+	 */
+	getComposerAttachments(): Locator {
+		return this.getContainer().locator(
+			'[data-test-id="attachment-preview-remove"], [data-test-id="chat-file-remove"]',
+		);
 	}
 
 	// ── Confirmations ─────────────────────────────────────────────────
@@ -385,9 +416,14 @@ export class InstanceAiPage extends BasePage {
 		return this.getPreviewNodeByName(nodeName).getByRole('button', { name: 'Execute step' });
 	}
 
+	/**
+	 * The "Execute step" toolbar button only renders once the AI build has
+	 * finished, and mid-stream canvas re-renders can dismiss an open toolbar,
+	 * so reveal it with a re-hovering poll.
+	 */
 	async executePreviewNodeByName(nodeName: string): Promise<void> {
 		const executeNodeButton = this.getPreviewExecuteNodeButton(nodeName);
-		await executeNodeButton.waitFor({ state: 'visible', timeout: 5_000 });
+		await hoverToReveal(this.getPreviewNodeByName(nodeName), executeNodeButton);
 		await executeNodeButton.dispatchEvent('click');
 	}
 

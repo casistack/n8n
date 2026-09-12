@@ -49,9 +49,9 @@ describe('MicrosoftEntraServicePrincipalApi Credential', () => {
 		requestMock.mockResolvedValue({ access_token: 'abc', token_type: 'Bearer', expires_in: 3599 });
 		requestsMock.mockClear();
 
-		// Stub ONLY OutboundHttp. The `fixed-vendor` path short-circuits before reading
-		// SsrfProtectionConfig/Service, so reaching any other DI token signals a regression
-		// (e.g. switching to `user-controlled`) and must fail loudly.
+		// Stub ONLY OutboundHttp. `getTokenRequestClient` resolves nothing else from
+		// the container, so reaching any other DI token signals a regression and
+		// must fail loudly.
 		vi.spyOn(Container, 'get').mockImplementation((token: unknown) => {
 			if (token === OutboundHttp) return { requests: requestsMock };
 			throw new Error('unexpected DI token');
@@ -61,7 +61,7 @@ describe('MicrosoftEntraServicePrincipalApi Credential', () => {
 	it('should have correct static properties', () => {
 		expect(credential.name).toBe('microsoftEntraServicePrincipalApi');
 		expect(credential.displayName).toBe('Microsoft Entra Service Principal');
-		expect(credential.documentationUrl).toBe('microsoftentra');
+		expect(credential.documentationUrl).toBe('microsoftentraserviceprincipal');
 		expect(credential.icon).toBe('file:icons/Microsoft.svg');
 
 		const accessToken = credential.properties.find(
@@ -189,9 +189,9 @@ describe('MicrosoftEntraServicePrincipalApi Credential', () => {
 		it('mints via the SSRF-exempt fixed-vendor client', async () => {
 			await callPreAuthentication(baseCredentials);
 
-			// `{ ssrf: 'disabled' }` proves the fixed-vendor path; the `throw on other DI token`
-			// mock proves SsrfProtectionConfig/Service are never consulted.
-			expect(requestsMock).toHaveBeenCalledWith({ ssrf: 'disabled' });
+			// `{ useDefaultSsrfPolicy: 'unsafe' }` proves the fixed-vendor path; the `throw on
+			// other DI token` mock proves nothing else is resolved from the container.
+			expect(requestsMock).toHaveBeenCalledWith({ useDefaultSsrfPolicy: 'unsafe' });
 		});
 
 		it('re-mints on each call without internal memoization', async () => {

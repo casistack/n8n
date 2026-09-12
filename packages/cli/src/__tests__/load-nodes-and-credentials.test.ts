@@ -6,7 +6,12 @@ import { Service } from '@n8n/di';
 import watcher from '@parcel/watcher';
 import fs from 'fs/promises';
 import { CUSTOM_NODES_PACKAGE_NAME, DirectoryLoader } from 'n8n-core';
-import type { ICredentialType, INodeProperties, INodeTypeDescription } from 'n8n-workflow';
+import type {
+	ICredentialType,
+	INodeProperties,
+	INodeTypeDescription,
+	NodeLoader,
+} from 'n8n-workflow';
 import type { Mock } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
@@ -167,6 +172,33 @@ describe('LoadNodesAndCredentials', () => {
 				);
 				expect(result).toBe(winIconPath);
 			});
+		});
+	});
+
+	describe('resolveNodeSourcePath', () => {
+		let instance: LoadNodesAndCredentials;
+
+		beforeEach(() => {
+			instance = new LoadNodesAndCredentials(mock(), mock(), mock(), mock(), mock(), mock());
+			const loader = mock<DirectoryLoader>({ directory: '/nodes/package1' } as never);
+			Object.setPrototypeOf(loader, DirectoryLoader.prototype);
+			instance.loaders.package1 = loader;
+		});
+
+		it('should resolve a package-relative source path against the loader directory', () => {
+			const result = instance.resolveNodeSourcePath(
+				'package1.test',
+				'dist/nodes/Test/Test.node.js',
+			);
+			expect(result).toBe('/nodes/package1/dist/nodes/Test/Test.node.js');
+		});
+
+		it('should return the source path unchanged if the loader for the package is not found', () => {
+			const result = instance.resolveNodeSourcePath(
+				'unknownPackage.test',
+				'dist/nodes/Test/Test.node.js',
+			);
+			expect(result).toBe('dist/nodes/Test/Test.node.js');
 		});
 	});
 
@@ -737,6 +769,49 @@ describe('LoadNodesAndCredentials', () => {
 			});
 			expect(createAiTools).toHaveBeenCalledWith(instance.types, expectedKnown);
 			expect(createHitlTools).toHaveBeenCalledWith(instance.types, expectedKnown);
+		});
+
+		describe('atomic registry swap (known, loaded, types)', () => {
+			const createLoader = () =>
+				mock<NodeLoader>({
+					packageName: 'testPackage',
+					known: {
+						nodes: { TestNode: { className: 'TestNode', sourcePath: 'Test.node.js' } },
+						credentials: {},
+					},
+					types: { nodes: [{ name: 'TestNode' }], credentials: [] },
+					ensureTypesLoaded: vi.fn().mockResolvedValue(undefined),
+				});
+
+			it('should keep serving the previous registry while a loader reloads its types', async () => {
+				const loader = createLoader();
+				instance.loaders = { testPackage: loader };
+				await instance.postProcessLoaders();
+
+				// ensureTypesLoaded reloads from disk, so the registry is observed from inside it
+				let isKnownDuringReload: boolean | undefined;
+				// eslint-disable-next-line @typescript-eslint/require-await
+				(loader.ensureTypesLoaded as Mock).mockImplementation(async () => {
+					isKnownDuringReload = instance.isKnownNode('testPackage.TestNode');
+				});
+
+				await instance.postProcessLoaders();
+
+				expect(isKnownDuringReload).toBe(true);
+				expect(instance.types.nodes).toHaveLength(1);
+			});
+
+			it('should leave the previous registry intact when a loader fails to reload', async () => {
+				const loader = createLoader();
+				instance.loaders = { testPackage: loader };
+				await instance.postProcessLoaders();
+
+				(loader.ensureTypesLoaded as Mock).mockRejectedValue(new Error('reload failed'));
+
+				await expect(instance.postProcessLoaders()).rejects.toThrow('reload failed');
+				expect(instance.isKnownNode('testPackage.TestNode')).toBe(true);
+				expect(instance.types.nodes).toHaveLength(1);
+			});
 		});
 	});
 
