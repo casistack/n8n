@@ -30,7 +30,7 @@ COPY patches ./patches
 RUN --mount=type=cache,id=n8n-pnpm-store,target=/pnpm/store,sharing=locked \
 	corepack enable && \
 	pnpm config set store-dir /pnpm/store && \
-	pnpm fetch --frozen-lockfile --reporter=append-only --loglevel=info
+	pnpm fetch --reporter=append-only --loglevel=info
 
 COPY . .
 
