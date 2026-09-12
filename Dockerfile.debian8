@@ -114,7 +114,11 @@ COPY docker-entrypoint-debian2.sh /
 RUN chmod +x /docker-entrypoint-debian2.sh && \
 	ln -sf /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
 	cd /usr/local/lib/node_modules/n8n && \
-	npm rebuild sqlite3 isolated-vm && \
+	npm rebuild sqlite3 && \
+	isolated_vm_dir="$(echo node_modules/.pnpm/isolated-vm@*/node_modules/isolated-vm)" && \
+	rm -rf "$isolated_vm_dir/build" "$isolated_vm_dir/out" "$isolated_vm_dir/prebuilds" && \
+	cd "$isolated_vm_dir" && \
+	node /usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild --release -j max && \
 	mkdir -p /home/node/.n8n/storage && \
 	mkdir -p /home/node/.n8n/nodes && \
 	chmod 700 /home/node/.n8n/storage && \
