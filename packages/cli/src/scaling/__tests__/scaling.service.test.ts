@@ -4,7 +4,7 @@ import { GlobalConfig, WorkerPoolConfig } from '@n8n/config';
 import type { ExecutionRepository } from '@n8n/db';
 import { Container } from '@n8n/di';
 import * as BullModule from 'bull';
-import { InstanceSettings } from 'n8n-core';
+import { ENCODED_BUFFER_KEY, InstanceSettings } from 'n8n-core';
 import type { ErrorReporter } from 'n8n-core';
 import { UnexpectedError } from 'n8n-workflow';
 import type { MockInstance } from 'vitest';
@@ -18,7 +18,7 @@ import { JOB_TYPE_NAME } from '../constants';
 import type { JobProcessor } from '../job-processor';
 import { ScalingService } from '../scaling.service';
 import type { Job, JobData, JobId, JobQueue } from '../scaling.types';
-import { ENCODED_BUFFER_KEY, type WebhookResponseRelay } from '../webhook-response-relay';
+import type { WebhookResponseRelay } from '../webhook-response-relay';
 
 const queue = mock<JobQueue>({
 	client: { ping: vi.fn() },
@@ -152,19 +152,11 @@ describe('ScalingService', () => {
 
 		// @ts-expect-error Private method
 		ScalingService.prototype.scheduleQueueRecovery = vi.fn();
-		registerMainOrWebhookListenersSpy = vi.spyOn(
-			scalingService,
-			// @ts-expect-error Private method
-			'registerMainOrWebhookListeners',
-		);
-		// @ts-expect-error Private method
+		registerMainOrWebhookListenersSpy = vi.spyOn(scalingService, 'registerMainOrWebhookListeners');
 		registerWorkerListenersSpy = vi.spyOn(scalingService, 'registerWorkerListeners');
-		// @ts-expect-error Private method
 		scheduleQueueRecoverySpy = vi.spyOn(scalingService, 'scheduleQueueRecovery');
-		// @ts-expect-error Private method
 		stopQueueRecoverySpy = vi.spyOn(scalingService, 'stopQueueRecovery');
 
-		// @ts-expect-error Private method
 		stopQueueMetricsSpy = vi.spyOn(scalingService, 'stopQueueMetrics');
 	});
 
@@ -898,7 +890,7 @@ describe('ScalingService', () => {
 
 			await scalingService.recoverFromQueue();
 
-			expect(executionCrashService.markAsCrashed).toHaveBeenCalledWith(['123']);
+			expect(executionCrashService.markAsCrashed).toHaveBeenCalledWith(['123'], 'queue-recovery');
 		});
 
 		it('should mark running executions as crashed if they are missing from the queue and queue is not empty', async () => {
@@ -908,7 +900,7 @@ describe('ScalingService', () => {
 
 			await scalingService.recoverFromQueue();
 
-			expect(executionCrashService.markAsCrashed).toHaveBeenCalledWith(['123']);
+			expect(executionCrashService.markAsCrashed).toHaveBeenCalledWith(['123'], 'queue-recovery');
 		});
 
 		it('should not mark running executions as crashed if they are present in the queue', async () => {
