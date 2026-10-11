@@ -7,6 +7,7 @@ import {
 	INSTANCE_AI_SKILLS_DIR,
 	loadInstanceAiRuntimeSkillSource,
 	loadInstanceAiRuntimeSkillSourceForBuildMode,
+	warmRuntimeSkills,
 } from '../runtime-skills';
 import { CONFIG_EVALS_SKILL_ID, disabledInstanceAiSkillIds } from '../skill-gates';
 
@@ -61,6 +62,24 @@ describe('Instance AI runtime skills', () => {
 			'utf-8',
 		);
 		expect(skill).toContain('knowledge-base/reference/workflow-sdk-language.md');
+	});
+
+	// Code nodes were 19% of all nodes in production builds versus 10% in public
+	// templates, and half of a sample were plain field shaping. The old rule ended
+	// with an escape hatch ("if it makes it simpler, go ahead and use code node").
+	it('prefers native nodes over Code nodes with no escape hatch', () => {
+		const skill = readFileSync(
+			join(INSTANCE_AI_SKILLS_DIR, 'workflow-builder', 'SKILL.md'),
+			'utf-8',
+		);
+		expect(skill).not.toMatch(/if it makes it simpler, go ahead and use code node/i);
+		expect(skill).toContain('Native node first');
+		expect(skill).toContain('Edit Fields (Set)');
+		expect(skill).toContain('Native node mappings');
+		// The Python bullet that follows the rule stays as it was.
+		expect(skill).toContain(
+			'Write Code nodes in JavaScript unless the user explicitly asks for Python.',
+		);
 	});
 
 	// The builder agent has been observed recalling a pre-ADO-5627 `.group()` signature
@@ -250,6 +269,18 @@ describe('Instance AI runtime skills', () => {
 		}
 	});
 
+	it('loads the bundled agent-builder skill', async () => {
+		const source = await loadRuntimeSkillSourceWithEnabledModules('instance-ai, agents');
+		const skill = source.registry.skills.find((entry) => entry.name === 'agent-builder');
+
+		expect(skill).toBeDefined();
+
+		const loaded = await source.loadSkill('agent-builder');
+		expect(loaded?.instructions).toContain('## Agent UI labels');
+		expect(loaded?.instructions).toContain('Sessions tab');
+		expect(loaded?.instructions).toContain('Never say Runs tab');
+	});
+
 	it('loads the bundled Computer Use credential setup skill', async () => {
 		const source = loadInstanceAiRuntimeSkillSource();
 		const skill = source.registry.skills.find(
@@ -398,7 +429,7 @@ describe('Instance AI runtime skills', () => {
 			'research',
 			'ask-user',
 		]);
-		expect(skill?.description).toContain('Load create-tasks via load_tool before calling it');
+		expect(skill?.description).toContain('If create-tasks is not visible, load it via load_tool');
 		expect(skill?.description).toContain('Do NOT use for new one-off workflows');
 
 		const loaded = await source.loadSkill('planning');
@@ -406,7 +437,7 @@ describe('Instance AI runtime skills', () => {
 		expect(loaded?.instructions).toContain('Consult the knowledge base before planning');
 		expect(loaded?.instructions).toContain('never load `templates/index.json` wholesale');
 		expect(loaded?.instructions).toContain(
-			'Before calling `create-tasks`, load it via `load_tool`',
+			'If `create-tasks` is not visible, load it via `load_tool`',
 		);
 		expect(loaded?.instructions).toContain('Do not call `create-tasks` just to get approval');
 		expect(loaded?.instructions).toContain('planningContext.source: "planning-skill"');
@@ -584,3 +615,60 @@ async function loadRuntimeSkillSourceWithEnabledModules(enabledModules: string |
 	const { loadInstanceAiRuntimeSkillSource } = await import('../runtime-skills.js');
 	return loadInstanceAiRuntimeSkillSource();
 }
+
+describe('warmRuntimeSkills', () => {
+	const registry = {
+		schemaVersion: 1 as const,
+		skillsHash: 'skills-hash',
+		skills: [{ id: 'data-table-manager', name: 'data-table-manager', description: 'x' }],
+	};
+
+	it('runs the background preparation in the actor span of the chat trace', async () => {
+		let insideSpan = false;
+		let preparedInsideSpan = false;
+		const actorRun = { id: 'actor-run' };
+		const withActiveSpan = vi.fn(async (_run: unknown, fn: () => Promise<unknown>) => {
+			insideSpan = true;
+			try {
+				return await fn();
+			} finally {
+				insideSpan = false;
+			}
+		});
+		const prepare = vi.fn(async () => {
+			preparedInsideSpan = insideSpan;
+		});
+
+		warmRuntimeSkills({ registry, prepare, loadSkill: vi.fn() } as never, {
+			tracing: { actorRun, withActiveSpan } as never,
+		});
+
+		await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+		expect(withActiveSpan).toHaveBeenCalledWith(actorRun, expect.any(Function));
+		expect(preparedInsideSpan).toBe(true);
+	});
+
+	it('keeps the chat trace open until the background preparation settles', () => {
+		const preparation = Promise.resolve();
+		const keepOpenUntilSettled = vi.fn();
+		const tracing = {
+			actorRun: { id: 'actor-run' },
+			withActiveSpan: vi.fn(async () => await preparation),
+			keepOpenUntilSettled,
+		};
+
+		warmRuntimeSkills({ registry, prepare: vi.fn(), loadSkill: vi.fn() } as never, {
+			tracing: tracing as never,
+		});
+
+		expect(keepOpenUntilSettled).toHaveBeenCalledWith(tracing.withActiveSpan.mock.results[0].value);
+	});
+
+	it('prepares the source without a span when tracing is off', async () => {
+		const prepare = vi.fn(async () => {});
+
+		warmRuntimeSkills({ registry, prepare, loadSkill: vi.fn() } as never);
+
+		await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+	});
+});

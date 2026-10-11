@@ -36,6 +36,7 @@ import { mock } from 'vitest-mock-extended';
 import type { CredentialsService } from '@/credentials/credentials.service';
 import type { VariablesService } from '@/environments.ee/variables/variables.service.ee';
 import type { ExecutionPersistence } from '@/executions/execution-persistence';
+import { DeprecatedNodesError } from '@/errors/response-errors/deprecated-nodes.error';
 import { WorkflowPublishBlockedError } from '@/errors/response-errors/workflow-publish-blocked.error';
 import type { DataTableColumnRepository } from '@/modules/data-table/data-table-column.repository';
 import type { DataTableDDLService } from '@/modules/data-table/data-table-ddl.service';
@@ -44,6 +45,7 @@ import type { DataTableRepository } from '@/modules/data-table/data-table.reposi
 import type { RedactionEnforcementService } from '@/modules/redaction/redaction-enforcement.service';
 import type { PolicyEnforcementService } from '@/policy/policy-enforcement.service';
 import { PolicyViolationError } from '@/policy/policy-violation.error';
+import type { DeprecatedNodesValidationService } from '@/workflows/deprecated-nodes-validation.service';
 import type { WorkflowHistoryService } from '@/workflows/workflow-history/workflow-history.service';
 import type { WorkflowMutationHooksProxy } from '@/workflows/workflow-mutation-hooks-proxy.service';
 import type { WorkflowPublishGuardProxy } from '@/workflows/workflow-publish-guard-proxy.service';
@@ -86,6 +88,7 @@ describe('SourceControlImportService', () => {
 	const dataTableColumnRepository = mock<DataTableColumnRepository>();
 	const dataTableDDLService = mock<DataTableDDLService>();
 	const redactionEnforcementService = mock<RedactionEnforcementService>();
+	const deprecatedNodesValidationService = mock<DeprecatedNodesValidationService>();
 	const policyEnforcementService = mock<PolicyEnforcementService>();
 	policyEnforcementService.hasChecksFor.mockReturnValue(true);
 	policyEnforcementService.enforceContentImport.mockResolvedValue(mock());
@@ -140,6 +143,7 @@ describe('SourceControlImportService', () => {
 		workflowPublishGuard,
 		workflowMutationHooks,
 		workflowFinderService,
+		deprecatedNodesValidationService,
 	);
 
 	const globMock = fastGlob.default as unknown as Mock<(...args: string[]) => Promise<string[]>>;
@@ -169,6 +173,11 @@ describe('SourceControlImportService', () => {
 		credentialsRepository.runInTransaction.mockImplementation(
 			async (ctx, fn) => await fn(transactionManager, ctx),
 		);
+		// Route the sealed write through `upsert` so the payload assertions below still apply.
+		credentialsRepository.upsertImportedContent.mockImplementation(async (content) => {
+			await credentialsRepository.upsert(content, ['id']);
+			return (content as { id?: string }).id ?? 'generated-id';
+		});
 		sourceControlScopedService.getDataTablesInAdminProjectsFromContextFilter.mockReturnValue({});
 	});
 
@@ -1613,6 +1622,82 @@ describe('SourceControlImportService', () => {
 			});
 		});
 
+		describe('deprecated node enforcement', () => {
+			const mockUserId = 'user-id-123';
+			const deprecatedNode = {
+				id: 'node-1',
+				name: 'Function',
+				type: 'n8n-nodes-base.function',
+				typeVersion: 1,
+				position: [0, 0],
+				parameters: { functionCode: 'return items;' },
+			};
+			const workflowFile = (id: string) =>
+				JSON.stringify({
+					id,
+					name: `Workflow ${id}`,
+					active: false,
+					nodes: [deprecatedNode],
+					connections: {},
+					versionId: 'v1',
+					parentFolderId: null,
+				});
+
+			beforeEach(() => {
+				projectRepository.getPersonalProjectForUserOrFail.mockResolvedValue(
+					Object.assign(new Project(), {
+						id: 'personal-project-id-123',
+						name: 'Personal Project',
+						type: 'personal',
+						createdAt: new Date(),
+						updatedAt: new Date(),
+					}),
+				);
+				folderRepository.find.mockResolvedValue([]);
+				sharedWorkflowRepository.findWithFields.mockResolvedValue([]);
+				workflowRepository.upsertImportedContent.mockResolvedValue('1');
+			});
+
+			it('rejects a new workflow that fails the deprecated-node check', async () => {
+				workflowRepository.findByIds.mockResolvedValue([]);
+				fsReadFile.mockResolvedValueOnce(workflowFile('2'));
+				deprecatedNodesValidationService.validateOnCreate.mockImplementationOnce(() => {
+					throw new DeprecatedNodesError('blocked', { violations: [] });
+				});
+
+				const candidates = [mock<SourceControlledFile>({ file: '/mock/workflow2.json', id: '2' })];
+
+				await expect(service.importWorkflowFromWorkFolder(candidates, mockUserId)).rejects.toThrow(
+					DeprecatedNodesError,
+				);
+
+				expect(deprecatedNodesValidationService.validateOnCreate).toHaveBeenCalledWith(
+					[deprecatedNode],
+					'2',
+				);
+				expect(workflowRepository.upsertImportedContent).not.toHaveBeenCalled();
+			});
+
+			it('checks an existing workflow against its stored nodes', async () => {
+				workflowRepository.findByIds.mockResolvedValue([
+					Object.assign(new WorkflowEntity(), { id: '1', nodes: [deprecatedNode] }),
+				]);
+				fsReadFile.mockResolvedValueOnce(workflowFile('1'));
+
+				const candidates = [mock<SourceControlledFile>({ file: '/mock/workflow1.json', id: '1' })];
+
+				await service.importWorkflowFromWorkFolder(candidates, mockUserId);
+
+				expect(deprecatedNodesValidationService.validateOnUpdate).toHaveBeenCalledWith(
+					[deprecatedNode],
+					[deprecatedNode],
+					'1',
+				);
+				expect(deprecatedNodesValidationService.validateOnCreate).not.toHaveBeenCalled();
+				expect(workflowRepository.upsertImportedContent).toHaveBeenCalled();
+			});
+		});
+
 		describe('content-import policy enforcement', () => {
 			const mockUserId = 'user-id-123';
 			const mockWorkflowFile = '/mock/workflow1.json';
@@ -1658,15 +1743,18 @@ describe('SourceControlImportService', () => {
 
 				await service.importWorkflowFromWorkFolder(candidates, mockUserId);
 
-				expect(policyEnforcementService.enforceContentImport).toHaveBeenCalledWith({
-					workflow: {
-						id: mockWorkflowData.id,
-						name: mockWorkflowData.name,
-						nodes: mockWorkflowData.nodes,
+				expect(policyEnforcementService.enforceContentImport).toHaveBeenCalledWith(
+					{
+						workflow: {
+							id: mockWorkflowData.id,
+							name: mockWorkflowData.name,
+							nodes: mockWorkflowData.nodes,
+						},
+						projectId: 'personal-project-id-123',
+						transport: 'source-control',
 					},
-					projectId: 'personal-project-id-123',
-					transport: 'source-control',
-				});
+					{ kind: 'user', user: { id: mockUserId } },
+				);
 			});
 
 			// The clearance is checked at the write, so enforcing after the upsert would seal
@@ -2801,6 +2889,103 @@ describe('SourceControlImportService', () => {
 			expect(credentialsRepository.upsert).toHaveBeenCalled();
 
 			// Nested structures should be properly sanitized
+		});
+
+		describe('content-import policy enforcement', () => {
+			const mockCredentialFile = '/mock/credential_stubs/cred1.json';
+			const mockCredentialData = {
+				id: 'cred1',
+				name: 'Credential 1',
+				type: 'oauth2Api',
+				data: {},
+				ownedBy: null,
+				isGlobal: false,
+			};
+
+			beforeEach(() => {
+				fsReadFile.mockResolvedValueOnce(JSON.stringify(mockCredentialData));
+				credentialsRepository.find.mockResolvedValue([]);
+				sharedCredentialsRepository.find.mockResolvedValue([]);
+			});
+
+			it('enforces content-import policy for the imported credential, against the resolved target project', async () => {
+				const candidates = [mock<SourceControlledFile>({ file: mockCredentialFile, id: 'cred1' })];
+
+				await service.importCredentialsFromWorkFolder(candidates, mockUserId);
+
+				expect(policyEnforcementService.enforceContentImport).toHaveBeenCalledWith(
+					{
+						credential: { id: mockCredentialData.id, type: mockCredentialData.type },
+						projectId: mockPersonalProject.id,
+						transport: 'source-control',
+					},
+					{ kind: 'user', user: { id: mockUserId } },
+				);
+			});
+
+			// The clearance is checked at the write, so enforcing after the upsert would seal
+			// nothing — this pins the order.
+			it('enforces before writing the credential', async () => {
+				const candidates = [mock<SourceControlledFile>({ file: mockCredentialFile, id: 'cred1' })];
+
+				await service.importCredentialsFromWorkFolder(candidates, mockUserId);
+
+				expect(
+					policyEnforcementService.enforceContentImport.mock.invocationCallOrder[0],
+				).toBeLessThan(credentialsRepository.upsertImportedContent.mock.invocationCallOrder[0]);
+			});
+
+			it('skips a blocked credential, reports why, and writes nothing', async () => {
+				const violation: PolicyViolation = {
+					kind: 'credential-type-unavailable',
+					checkId: 'test.check',
+					message: 'not allowed',
+				};
+				policyEnforcementService.enforceContentImport.mockRejectedValueOnce(
+					new PolicyViolationError([violation]),
+				);
+				const candidates = [mock<SourceControlledFile>({ file: mockCredentialFile, id: 'cred1' })];
+
+				const result = await service.importCredentialsFromWorkFolder(candidates, mockUserId);
+
+				expect(result).toEqual([
+					{
+						id: mockCredentialData.id,
+						name: mockCredentialFile,
+						type: mockCredentialData.type,
+						contentImportPolicy: { violations: [violation], checkErrors: [] },
+					},
+				]);
+				expect(credentialsRepository.upsertImportedContent).not.toHaveBeenCalled();
+			});
+
+			// A check that cannot answer is an infrastructure fault, not a property of one
+			// credential. Skipping per credential would silently skip the whole pull.
+			it('fails the pull when the policy layer errors', async () => {
+				policyEnforcementService.enforceContentImport.mockRejectedValueOnce(
+					new Error('backend unavailable'),
+				);
+				const candidates = [mock<SourceControlledFile>({ file: mockCredentialFile, id: 'cred1' })];
+
+				await expect(
+					service.importCredentialsFromWorkFolder(candidates, mockUserId),
+				).rejects.toThrow('backend unavailable');
+
+				expect(credentialsRepository.upsertImportedContent).not.toHaveBeenCalled();
+			});
+
+			it('passes the clearance it was given to the write', async () => {
+				const cleared = mock<PolicyCleared<'contentImport'>>();
+				policyEnforcementService.enforceContentImport.mockResolvedValueOnce(cleared);
+				const candidates = [mock<SourceControlledFile>({ file: mockCredentialFile, id: 'cred1' })];
+
+				await service.importCredentialsFromWorkFolder(candidates, mockUserId);
+
+				expect(credentialsRepository.upsertImportedContent).toHaveBeenCalledWith(
+					expect.objectContaining({ id: mockCredentialData.id }),
+					expect.objectContaining({ policyCleared: cleared }),
+				);
+			});
 		});
 	});
 
@@ -3971,6 +4156,7 @@ describe('SourceControlImportService', () => {
 				expect(globMock).toHaveBeenCalledWith('*.json', {
 					cwd: '/mock/n8n/git/datatables',
 					absolute: true,
+					followSymbolicLinks: false,
 				});
 			});
 

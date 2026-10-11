@@ -32,23 +32,28 @@ import {
 	UserRepository,
 	WorkflowPublishedVersionRepository,
 } from '@n8n/db';
+import type { NodesConfig } from '@n8n/config';
 import { Container } from '@n8n/di';
 import * as fastGlob from 'fast-glob';
 import { Cipher } from 'n8n-core';
 import type { InstanceSettings } from 'n8n-core';
 import * as utils from 'n8n-workflow';
+import type { INodeType } from 'n8n-workflow';
 import { nanoid } from 'nanoid';
 import { readFile } from 'node:fs/promises';
 import type { Mock, Mocked } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
+import { DeprecatedNodesError } from '@/errors/response-errors/deprecated-nodes.error';
 import type { IWorkflowToImport } from '@/interfaces';
 import { SourceControlContextFactory } from '@/modules/source-control.ee/source-control-context.factory';
 import { SourceControlImportService } from '@/modules/source-control.ee/source-control-import.service.ee';
 import { SourceControlScopedService } from '@/modules/source-control.ee/source-control-scoped.service';
 import type { ExportableCredential } from '@/modules/source-control.ee/types/exportable-credential';
+import type { NodeTypes } from '@/node-types';
 import { PolicyEnforcementService } from '@/policy/policy-enforcement.service';
 import { PolicyViolationError } from '@/policy/policy-violation.error';
+import { DeprecatedNodesValidationService } from '@/workflows/deprecated-nodes-validation.service';
 import { WorkflowFinderService } from '@/workflows/workflow-finder.service';
 import { WorkflowHistoryService } from '@/workflows/workflow-history/workflow-history.service';
 import { createFolder } from '@test-integration/db/folders';
@@ -112,8 +117,17 @@ describe('SourceControlImportService', () => {
 		// The repository verifies the token, so it has to be a real one. With no backend
 		// registered the real service clears everything, which is what a default pull does.
 		mockPolicyEnforcementService.enforceContentImport.mockImplementation(
-			async (context) =>
-				await Container.get(PolicyEnforcementService).enforceContentImport(context),
+			async (context, actor) =>
+				await Container.get(PolicyEnforcementService).enforceContentImport(context, actor),
+		);
+		const nodeTypes = mock<NodeTypes>();
+		nodeTypes.getByNameAndVersion.mockImplementation((type) =>
+			Object.assign(mock<INodeType>(), {
+				description: {
+					deprecated: type === 'n8n-nodes-base.function' ? true : undefined,
+					properties: [{ displayName: 'Code', name: 'functionCode', type: 'string', default: '' }],
+				},
+			}),
 		);
 		service = new SourceControlImportService(
 			mock(),
@@ -148,6 +162,11 @@ describe('SourceControlImportService', () => {
 			mock(), // workflowPublishGuard
 			mock(), // workflowMutationHooks
 			Container.get(WorkflowFinderService),
+			new DeprecatedNodesValidationService(
+				mock(),
+				mock<NodesConfig>({ blockDeprecated: true }),
+				nodeTypes,
+			),
 		);
 	});
 
@@ -711,6 +730,23 @@ describe('SourceControlImportService', () => {
 			expect(new Set(versions.map((v) => v.id))).toEqual(
 				new Set([...teamACredentials.map((w) => w.id), ...teamBCredentials.map((w) => w.id)]),
 			);
+		});
+
+		it('should leave out credentials whose authorization is still pending', async () => {
+			const pending = await createCredentials(
+				{ name: 'pending', data: '', type: 'test' },
+				teamProjectA,
+			);
+			await credentialsRepository.update(pending.id, {
+				pendingAuthorizationExpiresAt: new Date(Date.now() + 60_000),
+			});
+
+			const versions = await service.getLocalCredentialsFromDb(
+				await sourceControlContextFactory.createContext(instanceOwner),
+			);
+
+			expect(versions.map((v) => v.id)).not.toContain(pending.id);
+			expect(versions).toHaveLength(teamACredentials.length + teamBCredentials.length);
 		});
 
 		it('should only get all available credentials from the team project, for a project admin', async () => {
@@ -1836,6 +1872,89 @@ describe('SourceControlImportService', () => {
 			});
 		});
 
+		describe('deprecated nodes', () => {
+			it('rejects pulling a new workflow that contains a deprecated node', async () => {
+				const importingUser = await getGlobalOwner();
+				const workflow = makeWorkflowImport({
+					nodes: [
+						{
+							id: 'node-1',
+							name: 'Function',
+							type: 'n8n-nodes-base.function',
+							typeVersion: 1,
+							position: [250, 300],
+							parameters: { functionCode: 'return items;' },
+						},
+					] as IWorkflowToImport['nodes'],
+				});
+				const file = putWorkflowFile(workflow.id, workflow);
+
+				await expect(
+					service.importWorkflowFromWorkFolder(
+						[mock<SourceControlledFile>({ id: workflow.id, file })],
+						importingUser.id,
+					),
+				).rejects.toThrow(DeprecatedNodesError);
+
+				await expect(workflowRepository.findOneBy({ id: workflow.id })).resolves.toBeNull();
+			});
+
+			const functionNode = {
+				id: 'node-1',
+				name: 'Function',
+				type: 'n8n-nodes-base.function',
+				typeVersion: 1,
+				position: [250, 300] as [number, number],
+				parameters: { functionCode: 'return items;' },
+			};
+
+			it('allows pulling an existing workflow whose deprecated node is unchanged', async () => {
+				const importingUser = await getGlobalOwner();
+				const workflowId = nanoid();
+				await createWorkflowWithHistory(
+					{ id: workflowId, name: 'Old name', nodes: [functionNode], connections: {} },
+					importingUser,
+				);
+				const workflow = makeWorkflowImport({
+					id: workflowId,
+					name: 'New name',
+					nodes: [functionNode] as IWorkflowToImport['nodes'],
+				});
+				const file = putWorkflowFile(workflowId, workflow);
+
+				await service.importWorkflowFromWorkFolder(
+					[mock<SourceControlledFile>({ id: workflowId, file })],
+					importingUser.id,
+				);
+
+				const stored = await workflowRepository.findOneBy({ id: workflowId });
+				expect(stored?.name).toBe('New name');
+			});
+
+			it('rejects pulling an existing workflow whose deprecated node was edited', async () => {
+				const importingUser = await getGlobalOwner();
+				const workflowId = nanoid();
+				await createWorkflowWithHistory(
+					{ id: workflowId, name: 'Test Workflow', nodes: [functionNode], connections: {} },
+					importingUser,
+				);
+				const workflow = makeWorkflowImport({
+					id: workflowId,
+					nodes: [
+						{ ...functionNode, parameters: { functionCode: 'return [];' } },
+					] as IWorkflowToImport['nodes'],
+				});
+				const file = putWorkflowFile(workflowId, workflow);
+
+				await expect(
+					service.importWorkflowFromWorkFolder(
+						[mock<SourceControlledFile>({ id: workflowId, file })],
+						importingUser.id,
+					),
+				).rejects.toThrow(DeprecatedNodesError);
+			});
+		});
+
 		describe('workflow history', () => {
 			it('should create workflow history for new workflow on import', async () => {
 				const importingUser = await getGlobalOwner();
@@ -2080,11 +2199,14 @@ describe('SourceControlImportService', () => {
 				);
 
 				expect(mockPolicyEnforcementService.enforceContentImport).toHaveBeenCalledTimes(1);
-				expect(mockPolicyEnforcementService.enforceContentImport).toHaveBeenCalledWith({
-					workflow: { id: workflow.id, name: workflow.name, nodes: workflow.nodes },
-					projectId: importingUserProject.id,
-					transport: 'source-control',
-				});
+				expect(mockPolicyEnforcementService.enforceContentImport).toHaveBeenCalledWith(
+					{
+						workflow: { id: workflow.id, name: workflow.name, nodes: workflow.nodes },
+						projectId: importingUserProject.id,
+						transport: 'source-control',
+					},
+					{ kind: 'user', user: { id: importingUser.id } },
+				);
 			});
 
 			it('skips a blocked workflow, attaches the reason, and persists nothing', async () => {
